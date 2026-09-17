@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest
+
+      # Gate order per docs/13-cicd.md. Steps below are added as they are built:
+      #   lint + type check
+      #   unit tests (verifier semantics, advantage computation)
+      #   adversarial SQL suite   <- blocking
+      #   integration + API tests
+      #   frontend build + component tests
+      #   secret + dependency scan
+      #   artifact schema validation
+      - name: Unit tests
+        run: pytest -q
