@@ -1,0 +1,6 @@
+TODO — choose a license before publishing.
+
+The master context file does not specify one. For a portfolio repo intended to be
+read and reused (the environment is meant to be pip-installable by other people),
+MIT or Apache-2.0 are the conventional choices. Decide, then replace this file with
+the full license text and set the matching classifier in pyproject.toml.

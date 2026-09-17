@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+datasets/
+scratch/
+results/*.json
+
+# Model checkpoints must never enter git history (same reason as datasets/).
+models/
+.env
+# Personal planning docs — not for the public repo.
+VERDICT-MASTER-CONTEXT.md
+VERIFIER-BUILD-GUIDE.md
+VIDEO-SCRIPT-MONTH-1.md
