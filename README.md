@@ -3,21 +3,21 @@
 **A verifiable reinforcement-learning environment for text-to-SQL, and a SQL assistant that
 knows when it is wrong.**
 
-> **Status: early scaffold (Week 1).** The repository layout, packaging, configuration and CI
-> are in place. Most modules are stubs and no results have been produced yet. See
-> [Project status](#project-status) for what is and is not built.
+> **Status: in development.** The execution verifier and reward function are implemented and
+> tested. Training, evaluation, audit and the application are not built yet, and no results have
+> been produced. See [Project status](#project-status).
 
 ## Problem
 
 Natural-language-to-SQL is shipped by every major data platform and trusted by almost
-nobody. The reason is not accuracy — it is that a wrong answer is not visibly wrong. A query
+nobody. The problem is less accuracy than visibility: a wrong answer does not look wrong. A query
 that misses a join or filters the wrong literal returns a plausible number with no error and
 no warning. One silent failure is enough to end an organisation's trust in the tool.
 
 ## Approach
 
-Verdict turns SQL correctness into an objective, automatic signal — execute the query,
-compare the rows — and aims to use it three ways:
+Verdict turns SQL correctness into an objective, automatic signal (execute the query,
+compare the rows) and uses it in three ways:
 
 1. to train a small open-weight model with reinforcement learning,
 2. to audit whether the benchmark's own gold answers are correct, and
@@ -25,10 +25,10 @@ compare the rows — and aims to use it three ways:
 
 ## Planned capabilities
 
-These are the deliverables the project is being built toward. None are complete yet.
+These are the deliverables the project is being built toward. The first two are complete.
 
-- Sandboxed, read-only, timeout-enforced SQL execution
-- Deterministic result-set normalisation and comparison
+- Sandboxed, read-only, timeout-enforced SQL execution (done)
+- Deterministic result-set normalisation and comparison (done)
 - Multi-database perturbation verification (catches memorised answers)
 - GRPO training pipeline with a control-domain gate
 - Benchmark ground-truth audit with a hand-built error taxonomy
@@ -51,13 +51,15 @@ GRPO trainer (Unsloth + vLLM) → experiment store → `results.json` artifact.
 | Repo scaffold, packaging (`pyproject.toml`), pytest | Done |
 | Path configuration (`verdict/config.py`) | Done |
 | GitHub Actions CI (unit-test gate) | Done |
-| `verdict/verifier`, `train`, `eval`, `audit`, `data`, `api` | Stubs |
+| Execution verifier (`verdict/verifier`): safety, timeouts, comparison | Done, 74 tests ([details](verdict/verifier/README.md)) |
+| Reward function (`verdict/train/reward.py`) | Done |
+| `train` (GRPO loop), `eval`, `audit`, `data`, `api` | Stubs |
 | `frontend/` screens | Stubs |
-| `docs/01`–`docs/25` | Placeholders |
+| `docs/01` to `docs/25` | Placeholders |
 | Experimental results | Not started |
 
-The build log is in [`LOG.md`](LOG.md). Layout decisions — including the conflicts that were
-resolved to produce this structure — are recorded in [`STRUCTURE.md`](STRUCTURE.md).
+The build log is in [`LOG.md`](LOG.md). Layout decisions, including the conflicts that were
+resolved to produce this structure, are recorded in [`STRUCTURE.md`](STRUCTURE.md).
 
 ## Repository layout
 
@@ -71,7 +73,7 @@ verdict/          Python package
   data/             BIRD loaders, filtering, perturbation, schema
   api/              FastAPI service
 frontend/         React + Tailwind client
-docs/             design documents (01–25)
+docs/             design documents (01 to 25)
 scripts/          data fetch + utility scripts
 configs/          experiment configuration
 tests/            pytest suite
@@ -84,7 +86,7 @@ datasets/         BIRD corpora (gitignored, never committed)
 Requires Python 3.11 or 3.12.
 
 ```bash
-git clone https://github.com/<your-username>/verdict.git
+git clone https://github.com/sristyanand00/verdict.git
 cd verdict
 
 python -m venv .venv
