@@ -135,3 +135,19 @@ Result: the reward test returns exactly `[1.0, 0.1, 0.0, 0.0]` for right / wrong
   Checked the usage example on a real BIRD database (`california_schools`, 17,686 rows, verdict `correct`).
 - Updated the project README status table: the verifier and reward are done; the rest is still stubs.
 - No logic changed. `pytest -q`: 74 passed.
+
+## 2026-10-03 · Tested the verifier by hand
+- Added `scripts/play_verifier.py`: rebuilds the test database at `scratch/tiny/tiny.sqlite`, prints both
+  tables, then lets me type SQL and see status, rows, verdict and score. `--demo` runs six fixed examples.
+- Tested the verifier by hand on the mock database with it, predicting each result on paper first.
+- Example: a typo (`ORDER BY name DES`) came back as status `error`, verdict `invalid`, score 0.0.
+  The message `near "DES": syntax error` is written by SQLite itself; `execute.py` only reads the message
+  and sorts it into a status (interrupted = timeout, not authorized / readonly = blocked, anything else = error).
+- Understood: the verifier needs a gold query to say "correct". With a real user there is no gold, which is
+  why the project later estimates confidence from several attempts agreeing.
+
+## 2026-10-03 · First look at real BIRD gold queries
+- Ran 60 random BIRD dev gold queries through `execute_query` (gold mode, 30 s limit): all 60 `ok`, none empty.
+- 4 of the 60 took 2 to 4 seconds (slowest: question 530, 3.9 s). The default limit is 5 s.
+- Consequence for Day 15: gold queries need a bigger time limit, or slow but valid gold answers will be
+  wrongly counted as GOLD FAILED. Gold results should be run once and cached, not re-run in every training step.
