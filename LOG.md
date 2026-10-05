@@ -151,3 +151,20 @@ Result: the reward test returns exactly `[1.0, 0.1, 0.0, 0.0]` for right / wrong
 - 4 of the 60 took 2 to 4 seconds (slowest: question 530, 3.9 s). The default limit is 5 s.
 - Consequence for Day 15: gold queries need a bigger time limit, or slow but valid gold answers will be
   wrongly counted as GOLD FAILED. Gold results should be run once and cached, not re-run in every training step.
+
+## 2026-10-03 · BIRD loader (left over from Day 6)
+**Why:** every later step (caching gold results, the audit, training, evaluation) reads BIRD. One loader
+means they all read it the same way, with the same paths and the same checks.
+
+- `verdict/data/loaders.py`: `load_bird_dev()` returns a list of `BirdTask`
+  (question_id, db_id, question, evidence, gold_sql, difficulty, db_path).
+- Paths come from `verdict/config.py` (`dev_json()`, `db_path()`), never hard-coded, so the data can move
+  with `VERDICT_DATA_ROOT`.
+- `data_root` can be changed, so the same questions can later point at perturbed database copies (Week 6).
+- Decided: the loader **raises** on bad data, unlike the verifier. A missing field, unknown difficulty,
+  duplicate id or missing database file should stop a run at the start, not show up later as thousands of
+  failed queries. All missing databases are reported in one message.
+- Text is trimmed of surrounding whitespace. 148 questions have an empty `evidence` hint; kept as `""`.
+- `tests/test_loaders.py`: 6 tests on a fake `dev.json` (run in CI, no BIRD needed) + 1 test on the real
+  data that checks 1,534 questions, 11 databases, 925 / 464 / 145 by difficulty (skipped if BIRD is absent).
+- `pytest -q`: 81 passed.
