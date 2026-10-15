@@ -12,3 +12,6 @@ models/
 VERDICT-MASTER-CONTEXT.md
 VERIFIER-BUILD-GUIDE.md
 VIDEO-SCRIPT-MONTH-1.md
+
+# Automatic change log written by scripts/watch_changes.py
+CHANGES.log
