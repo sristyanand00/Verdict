@@ -15,3 +15,7 @@ VIDEO-SCRIPT-MONTH-1.md
 
 # Automatic change log written by scripts/watch_changes.py
 CHANGES.log
+.pytest_cache/
+
+# Personal notes, learning guides and old step-by-step scripts.
+notes/

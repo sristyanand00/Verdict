@@ -4,7 +4,7 @@ Nothing else in the package should hardcode a data path. The reason is
 deployment: the same code runs in three places with the data mounted
 differently each time.
 
-    local dev   datasets/  ->  junction  ->  C:erdict-data\datasets
+    local dev   datasets/  ->  junction  ->  C:\verdict-data\datasets
     training    /mnt/bird                    (GPU host scratch disk)
     container   /data                        (volume mount, per the
                                               Deployment Architecture:
@@ -59,19 +59,6 @@ def db_path(db_id: str, root: Path | None = None) -> Path:
     return (root or data_root()) / "dev_databases" / db_id / f"{db_id}.sqlite"
 
 
-def readonly_uri(path: Path, immutable: bool = True) -> str:
-    """Driver-level read-only handle — the real write-prevention control.
-
-    A keyword blacklist is not the control (writes hide in CTEs and
-    subqueries); this is. ``immutable=1`` is safe for the static benchmark
-    corpora but must be False for anything being written concurrently.
-    """
-    uri = f"file:{path.as_posix()}?mode=ro"
-    if immutable:
-        uri += "&immutable=1"
-    return uri
-
-
 def check() -> None:
     """Fail loudly and early if the data is not where we think it is."""
     root = data_root()
@@ -87,7 +74,7 @@ def check() -> None:
         raise FileNotFoundError(
             "BIRD dev set not found.\n  "
             + "\n  ".join(problems)
-            + "\n\nRun: powershell -ExecutionPolicy Bypass -File scripts\fetch_bird.ps1"
+            + "\n\nRun: powershell -ExecutionPolicy Bypass -File scripts\\fetch_bird.ps1"
         )
 
 
