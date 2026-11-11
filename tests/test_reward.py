@@ -1,7 +1,9 @@
 import pickle
 
+import pytest
+
 from tests.fixtures import make_tiny_db
-from verdict.train.reward import SQLRewardFunction, extract_sql
+from verdict.train.reward import REWARD_SCHEMES, SQLRewardFunction, extract_sql
 
 GOLD = "SELECT name FROM students WHERE year = 2"
 
@@ -53,3 +55,21 @@ def test_reward_function_pickles(tmp_path):
     """The reward function is sent to worker processes, so it must pickle."""
     fn = pickle.loads(pickle.dumps(SQLRewardFunction(db_root=tmp_path)))
     assert fn.db_root == tmp_path
+
+
+def test_reward_schemes(tmp_path):
+    make_tiny_db(tmp_path)
+    completions = [
+        f"```sql\n{GOLD}\n```",
+        "```sql\nSELECT name FROM students WHERE year = 3\n```",
+        "```sql\nSELECT broken FROM\n```",
+    ]
+    for name, r in REWARD_SCHEMES.items():
+        fn = SQLRewardFunction(db_root=tmp_path, scheme=name)
+        out = fn(prompts=[], completions=completions, gold_sql=[GOLD] * 3, db_id=["tiny"] * 3)
+        assert out == [r["correct"], r["wrong"], r["failed"]], name
+
+
+def test_unknown_scheme_is_rejected(tmp_path):
+    with pytest.raises(ValueError, match="scheme"):
+        SQLRewardFunction(db_root=tmp_path, scheme="nope")
