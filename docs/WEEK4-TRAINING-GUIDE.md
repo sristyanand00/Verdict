@@ -224,7 +224,7 @@ python scripts/train_grpo.py \
 --epochs EPOCHS              Number of training epochs (default: 3)
 --batch-size BS              Training batch size (default: 8)
 --lr LR                      Learning rate (default: 1e-5)
---num-generations N          Completions per prompt (default: 4)
+--num-generations N          Completions per prompt (default: 8)
 --max-tokens TOKENS          Max tokens per completion (default: 256)
 --temperature TEMP           Sampling temperature (default: 0.7)
 --gradient-accumulation-steps N  Gradient accumulation (default: 2)
@@ -244,7 +244,7 @@ START
   ├─ Initialize model and tokenizer
   ├─ FOR each epoch:
   │   ├─ FOR each batch in training set:
-  │   │   ├─ Generate 4 completions per prompt
+  │   │   ├─ Generate 8 completions per prompt
   │   │   ├─ Execute and compare each completion
   │   │   ├─ Compute rewards (0.0, 0.1, or 1.0)
   │   │   ├─ Compute group-relative advantage
