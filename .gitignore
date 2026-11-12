@@ -8,6 +8,8 @@ results/*.json
 # Model checkpoints must never enter git history (same reason as datasets/).
 models/
 .env
+# Databases built from user uploads. They can hold other people's data.
+uploads/
 # Personal planning docs — not for the public repo.
 VERDICT-MASTER-CONTEXT.md
 VERIFIER-BUILD-GUIDE.md

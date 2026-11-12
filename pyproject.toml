@@ -9,6 +9,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The product engine: file uploads (pandas, openpyxl) and the Gemini SQL writer.
+app = [
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    "python-dotenv>=1.0",
+    "google-genai>=1.0",
+]
 train = [
     "torch>=2.0.0",
     "transformers>=4.40.0",

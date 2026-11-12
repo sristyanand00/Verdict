@@ -45,6 +45,12 @@ def results_root() -> Path:
     return Path(env).expanduser().resolve() if env else REPO_ROOT / "results"
 
 
+def uploads_root() -> Path:
+    """Where databases built from user uploads are written."""
+    env = os.environ.get("VERDICT_UPLOADS_ROOT")
+    return Path(env).expanduser().resolve() if env else REPO_ROOT / "uploads"
+
+
 def dev_json() -> Path:
     """BIRD dev questions — 1534 tasks."""
     return data_root() / "dev.json"
