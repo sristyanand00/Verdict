@@ -31,7 +31,7 @@ Database tables:
 {schema}
 
 Question: {question}
-
+{hint}
 Rules:
 - Use only the tables and columns listed above.
 - Write one SQLite SELECT query that answers the question.
@@ -57,8 +57,13 @@ class Attempt:
     raw: str = ""
 
 
-def build_prompt(schema: str, question: str) -> str:
-    return PROMPT_TEMPLATE.format(schema=schema, question=question.strip(), cannot=CANNOT_ANSWER)
+def build_prompt(schema: str, question: str, hint: str | None = None) -> str:
+    """``hint`` is extra knowledge for the question, like BIRD's "evidence"
+    field. The product does not pass one."""
+    hint_line = f"Hint: {hint.strip()}\n" if hint and hint.strip() else ""
+    return PROMPT_TEMPLATE.format(
+        schema=schema, question=question.strip(), hint=hint_line, cannot=CANNOT_ANSWER
+    )
 
 
 def parse_reply(text: str) -> Attempt:
@@ -78,7 +83,9 @@ def parse_reply(text: str) -> Attempt:
     return Attempt("sql", sql=sql, raw=text)
 
 
-def generate_attempts(writer: SQLWriter, schema: str, question: str, n: int = 8) -> list[Attempt]:
+def generate_attempts(
+    writer: SQLWriter, schema: str, question: str, n: int = 8, hint: str | None = None
+) -> list[Attempt]:
     """Ask ``writer`` for ``n`` independent replies and parse each one."""
-    replies = writer.write(build_prompt(schema, question), n)
+    replies = writer.write(build_prompt(schema, question, hint), n)
     return [parse_reply(r) for r in replies]

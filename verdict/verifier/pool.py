@@ -10,6 +10,7 @@ because connections can be neither pickled nor shared between processes.
 """
 
 import multiprocessing as mp
+import time
 from pathlib import Path
 
 from verdict.verifier.types import ExecutionResult
@@ -17,6 +18,9 @@ from verdict.verifier.types import ExecutionResult
 # spawn is the only start method on Windows. Using it everywhere also avoids
 # fork copying open SQLite handles into the child on Linux.
 _CTX = mp.get_context("spawn")
+
+#: Tries to start the worker process before giving up with "crashed".
+START_RETRIES = 4
 
 
 def _worker(sql: str, db_path: str, timeout_s: float, out) -> None:
@@ -36,8 +40,20 @@ def execute_isolated(
     Never raises and never leaves a child process running.
     """
     out = _CTX.Queue()
-    proc = _CTX.Process(target=_worker, args=(sql, str(db_path), timeout_s, out))
-    proc.start()
+    proc = None
+    # Windows can refuse to create a process for a moment ("Access is
+    # denied") when many start at once. That says nothing about the query,
+    # so retry briefly; if it keeps failing, return "crashed" as promised.
+    for attempt in range(START_RETRIES):
+        proc = _CTX.Process(target=_worker, args=(sql, str(db_path), timeout_s, out))
+        try:
+            proc.start()
+            break
+        except OSError as e:
+            proc = None
+            if attempt == START_RETRIES - 1:
+                return ExecutionResult(status="crashed", error=f"could not start worker: {e}")
+            time.sleep(0.2 * (attempt + 1))
     try:
         # Wait on the queue rather than the process: the result can be ready
         # while the child is still shutting down.
