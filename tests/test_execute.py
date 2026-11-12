@@ -58,3 +58,19 @@ def test_isolated_normal_query(tmp_path):
     db = make_tiny_db(tmp_path)
     r = execute_isolated("SELECT COUNT(*) FROM students", db)
     assert r.ok and r.rows == ((3,),)
+
+
+def test_isolated_returns_crashed_when_worker_cannot_start(tmp_path, monkeypatch):
+    from verdict.verifier import pool
+
+    class NoStart:
+        def __init__(self, *a, **k):
+            pass
+
+        def start(self):
+            raise PermissionError("[WinError 5] Access is denied")
+
+    monkeypatch.setattr(pool._CTX, "Process", NoStart)
+    monkeypatch.setattr(pool.time, "sleep", lambda s: None)
+    r = pool.execute_isolated("SELECT 1", tmp_path / "x.sqlite")
+    assert r.status == "crashed" and "could not start worker" in r.error

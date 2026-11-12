@@ -32,6 +32,10 @@ THRESHOLDS_FILE = Path(__file__).with_name("thresholds.json")
 
 Level = Literal["green", "yellow", "red", "unanswerable"]
 
+#: A threshold above 1 can never be reached: calibration writes it when no
+#: agreement level met the accuracy target, which turns that level off.
+NEVER = 1.01
+
 
 @dataclass(frozen=True)
 class TrustDecision:
@@ -47,33 +51,55 @@ class TrustDecision:
 def load_thresholds(path: str | Path = THRESHOLDS_FILE) -> dict[str, float]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     t = {k: float(data[k]) for k in ("green", "yellow", "cannot_answer")}
-    if not 0 < t["yellow"] <= t["green"] <= 1:
-        raise ValueError(f"thresholds must satisfy 0 < yellow <= green <= 1, got {t}")
+    if not 0 < t["yellow"] <= t["green"] <= NEVER:
+        raise ValueError(f"thresholds must satisfy 0 < yellow <= green <= {NEVER}, got {t}")
     return t
+
+
+def level_for(
+    n: int, n_cannot_answer: int, top_size: int, top_is_empty: bool, thresholds: dict[str, float]
+) -> Level:
+    """The trust rules on plain counts.
+
+    decide() uses this for live answers, and eval/calibration.py uses it on
+    saved evaluation records, so both always apply exactly the same rules.
+    """
+    t = thresholds
+    if n == 0:
+        return "red"
+    if n_cannot_answer / n > t["cannot_answer"]:
+        return "unanswerable"
+    score = top_size / n
+    if top_size and score >= t["green"] and not top_is_empty:
+        return "green"
+    if top_size and score >= t["yellow"]:
+        return "yellow"
+    return "red"
 
 
 def decide(grouping: Grouping, thresholds: dict[str, float] | None = None) -> TrustDecision:
     t = thresholds or load_thresholds()
     n = grouping.n_attempts
+    top = grouping.top
+    level = level_for(
+        n, grouping.n_cannot_answer, top.size if top else 0, bool(top and top.is_empty_answer), t
+    )
+
     if n == 0:
         return TrustDecision("red", 0.0, None, "No attempts were made.")
-
-    if grouping.n_cannot_answer / n > t["cannot_answer"]:
+    if level == "unanswerable":
         return TrustDecision(
             "unanswerable", 0.0, None,
             f"{grouping.n_cannot_answer} of {n} attempts said this data cannot answer the question.",
         )
-
-    top = grouping.top
     if top is None:
         return TrustDecision("red", 0.0, None, f"None of the {n} attempts produced a working query.")
 
     score = top.size / n
     agree = f"{top.size} of {n} attempts agree"
-
-    if score >= t["green"] and not top.is_empty_answer:
+    if level == "green":
         return TrustDecision("green", score, top, f"{agree}.")
-    if score >= t["yellow"]:
+    if level == "yellow":
         why = "the answer is empty" if top.is_empty_answer else "not enough agreement to be sure"
         return TrustDecision("yellow", score, top, f"{agree}, but {why}. Check before using.")
     if len(grouping.groups) == 1:

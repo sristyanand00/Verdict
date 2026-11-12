@@ -33,6 +33,10 @@ from verdict.verifier.types import ExecutionResult
 #: milliseconds; anything slower is almost certainly a bad join.
 QUERY_TIMEOUT_S = 5.0
 
+#: Queries run side by side, each in its own process. Starting many
+#: processes at once can fail on Windows, so at most this many at a time.
+MAX_PARALLEL_RUNS = 4
+
 #: compare_results decides row order from a "gold" SQL string. Passing a query
 #: without ORDER BY makes it compare rows as a multiset.
 _UNORDERED = "SELECT 1"
@@ -93,7 +97,7 @@ def run_and_group(
 
     # Each run starts its own process, so running them side by side cuts the
     # wait from roughly 8x to roughly 1x.
-    with ThreadPoolExecutor(max_workers=max(len(sql_idx), 1)) as pool:
+    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_RUNS) as pool:
         ran = list(pool.map(lambda i: execute_isolated(attempts[i].sql, db_path, timeout_s), sql_idx))
 
     results: list[ExecutionResult | None] = [None] * len(attempts)

@@ -40,3 +40,8 @@ def test_generate_asks_writer_n_times():
     attempts = generate_attempts(w, "t(a INT)", "q?", n=5)
     assert len(attempts) == 5 and all(a.kind == "sql" for a in attempts)
     assert len(w.prompts) == 1
+
+
+def test_hint_is_added_only_when_given():
+    assert "Hint:" not in build_prompt("t(a INT)", "q?")
+    assert "Hint: Virtual = 'F'" in build_prompt("t(a INT)", "q?", hint=" Virtual = 'F' ")
