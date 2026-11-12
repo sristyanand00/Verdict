@@ -1,0 +1,6 @@
+{
+  "source": "PLACEHOLDER: hand-picked starting values. Phase 2 (eval/calibration.py) measures on BIRD dev how often each agreement level is actually correct and rewrites this file.",
+  "green": 0.75,
+  "yellow": 0.5,
+  "cannot_answer": 0.5
+}
