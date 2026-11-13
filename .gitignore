@@ -21,3 +21,7 @@ CHANGES.log
 
 # Personal notes, learning guides and old step-by-step scripts.
 notes/
+
+# Large dataset files
+BIRD_dataset.zip
+*.zip
