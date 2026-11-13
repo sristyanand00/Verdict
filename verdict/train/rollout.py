@@ -35,11 +35,14 @@ def generate(
     n_completions: int = 4,
     config: GenerationConfig | None = None,
     max_prompt_tokens: int = 512,
-) -> list[list[str]]:
+    return_log_probs: bool = False,
+) -> list[list[str]] | tuple[list[list[str]], torch.Tensor]:
     """Return ``n_completions`` sampled completions for each prompt.
 
     Runs on whatever device the model is already on. All completions for one
     prompt come from a single ``generate`` call (``num_return_sequences``).
+    
+    If ``return_log_probs=True``, also returns log probabilities for policy gradient.
     """
     config = config or GenerationConfig()
     gen_kwargs = {
@@ -47,20 +50,59 @@ def generate(
         "num_return_sequences": n_completions,
         "pad_token_id": tokenizer.pad_token_id or tokenizer.eos_token_id,
     }
+    
+    if return_log_probs:
+        gen_kwargs["return_dict_in_generate"] = True
+        gen_kwargs["output_scores"] = True
 
     model.eval()
     results = []
+    all_log_probs = []
+    
     with torch.no_grad():
         for prompt in prompts:
             inputs = tokenizer(
                 prompt, return_tensors="pt", truncation=True, max_length=max_prompt_tokens
             ).to(model.device)
-            output_ids = model.generate(**inputs, **gen_kwargs)
-            prompt_len = inputs["input_ids"].shape[1]
-            results.append(
-                [
+            
+            if return_log_probs:
+                outputs = model.generate(**inputs, **gen_kwargs)
+                sequences = outputs.sequences
+                prompt_len = inputs["input_ids"].shape[1]
+                
+                # Decode text
+                texts = [
                     tokenizer.decode(ids[prompt_len:], skip_special_tokens=True).strip()
-                    for ids in output_ids
+                    for ids in sequences
                 ]
-            )
+                results.append(texts)
+                
+                # Compute log probabilities from scores
+                scores = outputs.scores  # tuple of (n_completions, vocab_size) for each token
+                log_probs = []
+                for step_idx, step_scores in enumerate(scores):
+                    # step_scores shape: (n_completions, vocab_size)
+                    step_log_probs = torch.log_softmax(step_scores, dim=-1)
+                    # Get log prob of chosen token
+                    chosen_tokens = sequences[:, prompt_len + step_idx]
+                    chosen_log_probs = step_log_probs.gather(1, chosen_tokens.unsqueeze(1)).squeeze(1)
+                    log_probs.append(chosen_log_probs)
+                
+                # Sum log probs across sequence length: shape (n_completions,)
+                sequence_log_probs = torch.stack(log_probs, dim=1).sum(dim=1)
+                all_log_probs.append(sequence_log_probs)
+            else:
+                # Original code path (no log probs)
+                output_ids = model.generate(**inputs, **gen_kwargs)
+                prompt_len = inputs["input_ids"].shape[1]
+                results.append(
+                    [
+                        tokenizer.decode(ids[prompt_len:], skip_special_tokens=True).strip()
+                        for ids in output_ids
+                    ]
+                )
+    
+    if return_log_probs:
+        # Concatenate all log probs: shape (total_completions,)
+        return results, torch.cat(all_log_probs)
     return results
