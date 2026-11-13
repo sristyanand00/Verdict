@@ -44,7 +44,7 @@ def main():
     )
     
     logger.info("Initializing trainer...")
-    trainer = GRPOTrainer(config, db_root=data_root())
+    trainer = GRPOTrainer(config, db_root=data_root() / "dev_databases")
     
     logger.info("\nStarting quick test...")
     logger.info("Expected time: 5-10 minutes")

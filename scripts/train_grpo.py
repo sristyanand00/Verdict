@@ -2,12 +2,17 @@
 """Train a text-to-SQL model with GRPO on BIRD dev.
 
 Usage:
-    python scripts/train_grpo.py --model Qwen/Qwen2.5-0.5B-Instruct --epochs 3 --batch-size 8
+    python scripts/train_grpo.py                                # defaults (fits a 16 GB T4)
     python scripts/train_grpo.py --num-tasks 16 --epochs 1      # quick smoke run
+    python scripts/train_grpo.py --checkpoint-dir /kaggle/working/checkpoints
 
 Environment:
     VERDICT_DATA_ROOT     folder holding dev.json and dev_databases/ (default: datasets/)
-    CUDA_VISIBLE_DEVICES  GPUs to use
+    VERDICT_RESULTS_ROOT  where training_results.json is written (default: results/)
+    CUDA_VISIBLE_DEVICES  GPUs to use (only the first is used)
+
+Note: BIRD dev is also BIRD's evaluation set. A model trained on it cannot be
+scored on BIRD dev; use this for development, and BIRD train for real results.
 """
 
 import argparse
@@ -29,6 +34,7 @@ from verdict.train.grpo import GRPOTrainer, GRPOTrainingConfig  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+DEFAULTS = GRPOTrainingConfig()
 
 
 def parse_args() -> argparse.Namespace:
@@ -37,17 +43,22 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    p.add_argument("--model", default="Qwen/Qwen2.5-0.5B-Instruct", help="Hugging Face model name")
-    p.add_argument("--epochs", type=int, default=3)
-    p.add_argument("--batch-size", type=int, default=8)
-    p.add_argument("--lr", type=float, default=1e-5, help="learning rate")
-    p.add_argument("--num-generations", type=int, default=8, help="completions per prompt (group size)")
-    p.add_argument("--max-tokens", type=int, default=256, help="max new tokens per completion")
-    p.add_argument("--temperature", type=float, default=0.7)
-    p.add_argument("--gradient-accumulation-steps", type=int, default=2)
+    p.add_argument("--model", default=DEFAULTS.model_name, help="Hugging Face model name")
+    p.add_argument("--epochs", type=int, default=DEFAULTS.num_epochs)
+    p.add_argument("--batch-size", type=int, default=DEFAULTS.batch_size, help="questions per batch")
+    p.add_argument("--lr", type=float, default=DEFAULTS.learning_rate, help="learning rate")
+    p.add_argument("--num-generations", type=int, default=DEFAULTS.num_generations, help="completions per question")
+    p.add_argument("--max-tokens", type=int, default=DEFAULTS.max_tokens, help="max new tokens per completion")
+    p.add_argument("--temperature", type=float, default=DEFAULTS.temperature)
+    p.add_argument("--gradient-accumulation-steps", type=int, default=DEFAULTS.gradient_accumulation_steps)
+    p.add_argument("--micro-batch-size", type=int, default=DEFAULTS.micro_batch_size,
+                   help="completions per forward/backward; lower it if you run out of GPU memory")
+    p.add_argument("--eval-max-tasks", type=int, default=DEFAULTS.eval_max_tasks,
+                   help="validation questions evaluated per epoch")
     p.add_argument("--checkpoint-dir", default="checkpoints")
-    p.add_argument("--num-tasks", type=int, default=None, help="use only the first N tasks")
+    p.add_argument("--num-tasks", type=int, default=None, help="use only N tasks (sampled across databases)")
     p.add_argument("--train-ratio", type=float, default=0.8)
+    p.add_argument("--seed", type=int, default=DEFAULTS.seed)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--no-stratified", action="store_true", help="split without preserving difficulty mix")
     return p.parse_args()
@@ -56,22 +67,22 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
-    if args.device == "cuda" and not torch.cuda.is_available():
-        logger.warning("CUDA not available, falling back to CPU")
+    if args.device.startswith("cuda") and not torch.cuda.is_available():
+        logger.warning("CUDA not available, falling back to CPU (this will be very slow)")
         args.device = "cpu"
-    if args.device == "cuda":
-        props = torch.cuda.get_device_properties(0)
-        logger.info("GPU: %s (%.1f GB)", props.name, props.total_memory / 1e9)
 
     try:
         all_tasks = load_bird_dev(data_root=data_root())
     except FileNotFoundError as e:
         logger.error("Failed to load BIRD: %s", e)
-        logger.error("Run: powershell -ExecutionPolicy Bypass -File scripts\fetch_bird.ps1")
+        logger.error("Set VERDICT_DATA_ROOT to the folder holding dev.json and dev_databases/")
         return 1
 
     if args.num_tasks:
-        all_tasks = all_tasks[: args.num_tasks]
+        # BIRD dev is sorted by database, so the first N would all be one or two
+        # databases. Take every k-th task instead to keep the variety.
+        step = max(len(all_tasks) // args.num_tasks, 1)
+        all_tasks = all_tasks[::step][: args.num_tasks]
     distribution = dict(Counter(t.difficulty for t in all_tasks))
     logger.info("Loaded %d tasks: %s", len(all_tasks), distribution)
 
@@ -88,17 +99,21 @@ def main() -> int:
         max_tokens=args.max_tokens,
         temperature=args.temperature,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
+        micro_batch_size=args.micro_batch_size,
+        eval_max_tasks=args.eval_max_tasks,
+        seed=args.seed,
         checkpoint_dir=Path(args.checkpoint_dir),
         device=args.device,
     )
     trainer = GRPOTrainer(config=config, db_root=data_root() / "dev_databases")
 
     start = time.time()
-    result = trainer.fit(train_tasks)
+    result = trainer.fit(train_tasks, val_tasks)
     elapsed = time.time() - start
     metrics = result["metrics"]
 
     results_path = results_root() / "training_results.json"
+    results_path.parent.mkdir(parents=True, exist_ok=True)
     results_path.write_text(
         json.dumps(
             {
@@ -118,11 +133,15 @@ def main() -> int:
     logger.info("Training finished in %.1f minutes", elapsed / 60)
     if metrics["reward_mean"]:
         logger.info(
-            "Reward: first epoch %.4f, last epoch %.4f; last accuracy %.2f%%",
-            metrics["reward_mean"][0], metrics["reward_mean"][-1], 100 * metrics["accuracy"][-1],
+            "Reward: first epoch %.4f, last epoch %.4f", metrics["reward_mean"][0], metrics["reward_mean"][-1]
+        )
+    if result["val_accuracy_before"] is not None:
+        logger.info(
+            "Validation accuracy: %.1f%% before, best %.1f%% after",
+            100 * result["val_accuracy_before"], 100 * result["best_val_accuracy"],
         )
     logger.info("Results: %s", results_path)
-    logger.info("Checkpoints: %s", result["checkpoint_dir"])
+    logger.info("Checkpoints: %s (latest/ and best/)", result["checkpoint_dir"])
     return 0
 
 

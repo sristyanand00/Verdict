@@ -71,11 +71,8 @@ def main():
         logger.info(f"   CUDA version: {torch.version.cuda}")
         logger.info(f"   GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
     else:
+        # No input() prompt here: it would hang a non-interactive Kaggle run.
         logger.warning("⚠️  No GPU detected! Training will be VERY slow on CPU.")
-        response = input("Continue anyway? (yes/no): ")
-        if response.lower() != "yes":
-            logger.info("Exiting.")
-            return
     
     # Load BIRD data
     logger.info("\nLoading BIRD dataset...")
@@ -124,7 +121,7 @@ def main():
     )
     
     try:
-        trainer = GRPOTrainer(config, db_root=data_root())
+        trainer = GRPOTrainer(config, db_root=data_root() / "dev_databases")
         logger.info("✅ Trainer initialized")
     except Exception as e:
         logger.error(f"❌ Failed to initialize trainer: {e}")
@@ -142,8 +139,13 @@ def main():
     logger.info("You can stop anytime with Ctrl+C and resume later")
     logger.info("=" * 60 + "\n")
     
+    # Validate on questions that are not in the training subset.
+    chosen = {t.question_id for t in train_tasks}
+    val_tasks = [t for t in all_tasks if t.question_id not in chosen]
+    random.shuffle(val_tasks)
+
     try:
-        result = trainer.fit(train_tasks)
+        result = trainer.fit(train_tasks, val_tasks)
         
         logger.info("\n" + "=" * 60)
         logger.info("TRAINING COMPLETE!")

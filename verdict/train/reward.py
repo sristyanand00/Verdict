@@ -70,18 +70,40 @@ class SQLRewardFunction:
         self.workers = workers
         self.scheme = scheme
         self.rewards = REWARD_SCHEMES[scheme]
+        # Gold results keyed by (db_id, gold_sql). A GRPO group scores n
+        # completions against the same gold query, and every epoch repeats
+        # the questions, so without this the gold query runs n x epochs times.
+        self._gold_cache: dict = {}
+
+    def __getstate__(self):
+        # Workers start with an empty cache rather than a copy of ours.
+        state = self.__dict__.copy()
+        state["_gold_cache"] = {}
+        return state
 
     def db_path(self, db_id: str) -> Path:
         # BIRD layout: <root>/<db_id>/<db_id>.sqlite
         return self.db_root / db_id / f"{db_id}.sqlite"
+
+    def _gold_result(self, gold_sql: str, db_id: str, db: Path):
+        key = (db_id, gold_sql)
+        result = self._gold_cache.get(key)
+        if result is None:
+            # Gold SQL is trusted, so the keyword pre-filter is skipped for it.
+            # Two threads may both miss and run it; that only wastes one query.
+            result = execute_query(gold_sql, db, timeout_s=self.timeout_s, use_first_pass_filter=False)
+            # A timeout can be load-related (many threads at once), so it is
+            # retried next time rather than remembered.
+            if result.status != "timeout":
+                self._gold_cache[key] = result
+        return result
 
     def _score_one(self, completion: str, gold_sql: str, db_id: str) -> float:
         db = self.db_path(db_id)
         cand = execute_query(extract_sql(completion), db, timeout_s=self.timeout_s)
         if not cand.ok:
             return self.rewards["failed"]
-        # Gold SQL is trusted, so the keyword pre-filter is skipped for it.
-        gold = execute_query(gold_sql, db, timeout_s=self.timeout_s, use_first_pass_filter=False)
+        gold = self._gold_result(gold_sql, db_id, db)
         v = compare_results(cand, gold, gold_sql)
         return self.rewards["correct"] if v.verdict == "correct" else self.rewards["wrong"]
 
