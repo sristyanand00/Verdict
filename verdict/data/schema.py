@@ -12,7 +12,7 @@ from verdict.verifier.safety import read_only_uri
 
 
 def get_schema(db_path: Path, num_samples: int = 3) -> str:
-    """Return every table's CREATE statement plus ``num_samples`` rows.
+    """Return every table's CREATE statement plus ``num_samples`` rows (0 for none).
 
     Example output::
 
@@ -36,6 +36,9 @@ def get_schema(db_path: Path, num_samples: int = 3) -> str:
         parts = []
         for name, create_sql in tables:
             parts.append(create_sql + ";")
+            if num_samples <= 0:
+                parts.append("")
+                continue
             # Quoted because BIRD table names can contain spaces or keywords.
             quoted = '"' + name.replace('"', '""') + '"'
             try:

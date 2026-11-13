@@ -3,9 +3,10 @@
 **A verifiable reinforcement-learning environment for text-to-SQL, and a SQL assistant that
 knows when it is wrong.**
 
-> **Status: in development.** The execution verifier and reward function are implemented and
-> tested. Training, evaluation, audit and the application are not built yet, and no results have
-> been produced. See [Project status](#project-status).
+> **Status: in development.** The execution verifier, reward function and GRPO training loop
+> are implemented and tested. Training runs on a single 16 GB GPU (Kaggle T4); see
+> [KAGGLE_QUICK_START.md](KAGGLE_QUICK_START.md). No published results yet.
+> See [Project status](#project-status).
 
 ## Problem
 
@@ -53,7 +54,8 @@ GRPO trainer (Unsloth + vLLM) → experiment store → `results.json` artifact.
 | GitHub Actions CI (unit-test gate) | Done |
 | Execution verifier (`verdict/verifier`): safety, timeouts, comparison | Done, 74 tests ([details](verdict/verifier/README.md)) |
 | Reward function (`verdict/train/reward.py`) | Done |
-| `train` (GRPO loop), `eval`, `audit`, `data`, `api` | Stubs |
+| GRPO training loop (`verdict/train/grpo.py`, `scripts/train_grpo.py`) | Done, tested on a tiny model; first GPU runs in progress |
+| `eval`, `audit`, `data`, `api` | In progress |
 | `frontend/` screens | Stubs |
 | `docs/01` to `docs/25` | Placeholders |
 | Experimental results | Not started |
