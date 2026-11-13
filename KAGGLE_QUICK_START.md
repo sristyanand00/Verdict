@@ -1,234 +1,104 @@
-# 🚀 Kaggle Training Quick Start - FIXED
+# Training on Kaggle
 
-## ✅ What Was Fixed
+Five cells. Run them in order in a Kaggle notebook.
 
-The Kaggle training was failing with:
-```
-FileNotFoundError: databases not found under /kaggle/working/datasets/dev_databases/dev_databases
-```
+**Notebook settings (right panel):**
+- Accelerator: **GPU T4 x2**. Only one GPU is used; T4 is the right choice over P100.
+- Internet: **On** (needed to clone the repo and download the model).
+- Add your BIRD dataset with **Add Input**. It must contain `dev.json` and `dev_databases/`.
 
-**Root Cause**: Path configuration inconsistency in the codebase:
-- `config.db_path()` expects: `data_root/dev_databases/db_id/db_id.sqlite`
-- `SQLRewardFunction.db_path()` expects: `db_root/db_id/db_id.sqlite`
+## Cell 1: check the GPU
 
-## 📋 Working Kaggle Notebook
-
-### Cell 1: Check GPU
 ```python
 import torch
-print(f"CUDA available: {torch.cuda.is_available()}")
-print(f"GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None'}")
+print("CUDA:", torch.cuda.is_available())
+print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "none")
+print("torch", torch.__version__)
 ```
 
-### Cell 2: Clone Repository
+If CUDA is `False`, turn on the GPU in settings and restart the session.
+
+## Cell 2: get the code
+
 ```python
-import os
-
-if os.path.exists("/kaggle/working/Verdict"):
-    print("⚠️ Removing old Verdict folder...")
-    !rm -rf /kaggle/working/Verdict
-
-print("📥 Cloning repo from GitHub...")
-!git clone https://github.com/sristyanand00/Verdict.git /kaggle/working/Verdict
-
-print("\n✅ Repository cloned!")
-print("\n=== Checking grpo.py ===")
-!wc -l /kaggle/working/Verdict/verdict/train/grpo.py
+!rm -rf /kaggle/working/Verdict
+!git clone --depth 1 https://github.com/sristyanand00/verdict.git /kaggle/working/Verdict
+!pip install -q sqlglot
+%cd /kaggle/working/Verdict
+!git log -1 --oneline
 ```
 
-### Cell 3: Link BIRD Dataset
+Only `sqlglot` is installed. Kaggle already has torch and transformers;
+reinstalling them can break the CUDA setup.
+
+## Cell 3: find the dataset
+
 ```python
-import os
-import shutil
+import glob, os
 
-print("🔍 Finding BIRD dataset...")
+hits = glob.glob("/kaggle/input/**/dev.json", recursive=True)
+hits = [h for h in hits if os.path.isdir(os.path.join(os.path.dirname(h), "dev_databases"))]
+assert hits, "No dev.json next to a dev_databases/ folder under /kaggle/input. Check Add Input."
+BIRD = os.path.dirname(hits[0])
 
-# Your Kaggle dataset path
-input_path = "/kaggle/input/datasets/sristyanand00/bird-sql-benchmark"
-output_path = "/kaggle/working/datasets"
-
-if os.path.exists(input_path):
-    print(f"✅ Found BIRD dataset at: {input_path}")
-    
-    # Create local datasets folder
-    os.makedirs(output_path, exist_ok=True)
-
-    # Copy files
-    shutil.copy(
-        os.path.join(input_path, "dev.json"),
-        os.path.join(output_path, "dev.json")
-    )
-    print(f"✅ Copied dev.json")
-
-    # Copy dev_databases folder
-    if os.path.exists(os.path.join(input_path, "dev_databases")):
-        shutil.copytree(
-            os.path.join(input_path, "dev_databases"),
-            os.path.join(output_path, "dev_databases"),
-            dirs_exist_ok=True
-        )
-        print(f"✅ Copied dev_databases/")
-
-    # Save path for later cells
-    with open("/kaggle/working/bird_path.txt", "w") as f:
-        f.write(output_path)
-
-    print(f"\n🎯 BIRD dataset ready at: {output_path}")
-else:
-    print(f"❌ Dataset not found at: {input_path}")
-    raise FileNotFoundError("BIRD dataset not found")
+os.environ["VERDICT_DATA_ROOT"] = BIRD
+os.environ["VERDICT_RESULTS_ROOT"] = "/kaggle/working/results"
+print("BIRD data:", BIRD)
+print("databases:", len(os.listdir(os.path.join(BIRD, "dev_databases"))))
 ```
 
-### Cell 4: Install Dependencies
+The databases are opened read-only, so they are used straight from
+`/kaggle/input`. There's no need to copy them.
+
+## Cell 4: quick test (about 10 to 20 minutes)
+
 ```python
-print("📦 Installing dependencies...")
-
-!pip install -q transformers accelerate datasets sqlglot
-
-# Verify installations
-import transformers
-import accelerate
-import sqlglot
-
-print(f"\n✅ transformers: {transformers.__version__}")
-print(f"✅ accelerate: {accelerate.__version__}")
-print(f"✅ sqlglot installed")
-print("\n🎯 All packages ready!")
+!python scripts/train_grpo.py --num-tasks 20 --epochs 1 --eval-max-tasks 4 \
+    --checkpoint-dir /kaggle/working/test_ckpt
 ```
 
-### Cell 5: Verify Dataset
+You should see lines like:
+
+```
+[epoch 1/1 batch 1/4] correct 3/32, ran 20/32, loss -0.0012 | gen 40s, sql 1s, update 6s
+```
+
+- `ran` is how many queries executed without an error. `correct` is how many
+  returned the right answer. Both should be above zero for most batches.
+- Note the seconds per batch. Multiply by the number of batches to estimate
+  the full run.
+- If you get `CUDA out of memory`, add `--micro-batch-size 2`, or 1.
+
+## Cell 5: real training
+
 ```python
-import sys
-import json
-
-# Add verdict repo to Python path
-sys.path.insert(0, '/kaggle/working/Verdict')
-
-# Load BIRD path
-with open("/kaggle/working/bird_path.txt", "r") as f:
-    bird_path = f.read().strip()
-
-# Load dev.json
-dev_json_path = f"{bird_path}/dev.json"
-with open(dev_json_path, 'r') as f:
-    data = json.load(f)
-
-print(f"✅ Loaded {len(data)} questions from BIRD dev set")
-print(f"\n📋 First question example:")
-print(f"Question: {data[0]['question']}")
-print(f"Database: {data[0]['db_id']}")
-print(f"\n🎯 Dataset verified and ready for training!")
+!python scripts/train_grpo.py --num-tasks 300 --epochs 2 \
+    --checkpoint-dir /kaggle/working/checkpoints
 ```
 
-### Cell 6: Quick Test Training (FIXED!)
+- 300 questions are spread across all the databases: 240 to train on and 60 to
+  check progress on.
+- Validation accuracy is printed before training and after every epoch. That
+  number shows whether the model is improving.
+- Checkpoints are saved in `/kaggle/working/checkpoints/`: `latest/` after
+  every epoch, and `best/` when validation accuracy improves.
+- Results are saved to `/kaggle/working/results/training_results.json`.
+
+**For long runs**, use **Save Version → Save & Run All (Commit)** instead of
+running cells interactively. The run then continues after you close the
+browser, and everything in `/kaggle/working` is kept as the notebook's output.
+Kaggle stops any session after 12 hours.
+
+## Loading the trained model later
+
 ```python
-import sys
-sys.path.insert(0, '/kaggle/working/Verdict')
-
-from verdict.train.grpo import GRPOTrainer, GRPOTrainingConfig
-from verdict.data.loaders import load_bird_dev
-from pathlib import Path
-import torch
-
-# Load BIRD path
-with open("/kaggle/working/bird_path.txt", "r") as f:
-    bird_path = f.read().strip()
-
-# Setup paths correctly - THIS IS THE FIX!
-dev_json_path = Path(bird_path) / "dev.json"
-data_root = Path(bird_path)  # For load_bird_dev: expects data_root/dev_databases/...
-db_root = Path(bird_path) / "dev_databases"  # For GRPOTrainer: expects db_root/db_id/...
-
-print(f"📁 Data root: {data_root}")
-print(f"📁 DB root: {db_root}")
-print(f"📄 dev.json: {dev_json_path}")
-
-# Create training config
-config = GRPOTrainingConfig(
-    model_name="Qwen/Qwen2.5-0.5B-Instruct",
-    num_epochs=1,
-    batch_size=4,
-    num_generations=8,
-    temperature=0.7,
-    checkpoint_dir=Path("/kaggle/working/test_output"),
-    device="cuda" if torch.cuda.is_available() else "cpu"
-)
-
-# Load BIRD tasks
-print("\n📚 Loading BIRD dataset...")
-all_tasks = load_bird_dev(dev_json_path, data_root=data_root)
-print(f"✅ Loaded {len(all_tasks)} tasks")
-
-# Use only 5 questions for quick test
-test_tasks = all_tasks[:5]
-print(f"\n🧪 Testing with {len(test_tasks)} questions:")
-for i, task in enumerate(test_tasks, 1):
-    print(f"  {i}. {task.db_id}: {task.question[:60]}...")
-
-# Initialize trainer
-print("\n⚙️ Initializing GRPOTrainer...")
-trainer = GRPOTrainer(config=config, db_root=db_root)
-
-print("\n🚀 Running quick test: 5 questions, 1 epoch")
-print("Expected time: 5-10 minutes\n")
-print("=" * 70)
-
-# Train
-result = trainer.fit(test_tasks, num_epochs=1, batch_size=4)
-
-print("=" * 70)
-print("\n✅ Test complete!")
-print(f"\n📊 Metrics:")
-for key, value in result['metrics'].items():
-    print(f"  {key}: {value}")
-
-print("\n✅ If no errors above, proceed to Cell 7 for full training!")
+from transformers import AutoModelForCausalLM, AutoTokenizer
+model = AutoModelForCausalLM.from_pretrained("/kaggle/working/checkpoints/best")
+tok = AutoTokenizer.from_pretrained("/kaggle/working/checkpoints/best")
 ```
 
-### Cell 7: Full Training (Run after Cell 6 succeeds)
-```python
-# Use more questions and epochs for real training
-full_tasks = all_tasks[:100]  # Start with 100 questions
+## A note on the data
 
-config_full = GRPOTrainingConfig(
-    model_name="Qwen/Qwen2.5-0.5B-Instruct",
-    num_epochs=3,
-    batch_size=4,
-    num_generations=8,
-    temperature=0.7,
-    checkpoint_dir=Path("/kaggle/working/full_output"),
-    device="cuda"
-)
-
-trainer_full = GRPOTrainer(config=config_full, db_root=db_root)
-
-print(f"🚀 Starting full training: {len(full_tasks)} questions, 3 epochs")
-result_full = trainer_full.fit(full_tasks, num_epochs=3, batch_size=4)
-
-print("\n✅ Full training complete!")
-print(f"📊 Final Metrics: {result_full['metrics']}")
-```
-
-## 🎯 Key Points
-
-1. **Two different path expectations**:
-   - `load_bird_dev()` needs `data_root` (parent of `dev_databases`)
-   - `GRPOTrainer()` needs `db_root` (the `dev_databases` folder itself)
-
-2. **Why this happens**:
-   - `config.db_path()` adds `/dev_databases/` to the path
-   - `SQLRewardFunction.db_path()` does NOT add it
-
-3. **The fix**:
-   ```python
-   data_root = Path(bird_path)                    # /kaggle/working/datasets
-   db_root = Path(bird_path) / "dev_databases"    # /kaggle/working/datasets/dev_databases
-   ```
-
-## 📦 Files Created
-
-- `kaggle_training_fix.md` - Detailed explanation of the fix
-- `KAGGLE_CELL_6_FIXED.py` - Ready-to-use Cell 6 code
-- `KAGGLE_QUICK_START.md` - This file
-
-All changes committed and pushed to GitHub! ✅
+BIRD dev is also BIRD's official test set. Training on it is fine for
+development, but a model trained on dev cannot report a BIRD dev score. For
+results you publish, train on BIRD **train** and evaluate on dev.
