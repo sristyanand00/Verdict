@@ -19,6 +19,7 @@ exist for ablations against that default.
 
 import re
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 
 from verdict.verifier.compare import compare_results
@@ -33,6 +34,42 @@ REWARD_SCHEMES: dict[str, dict[str, float]] = {
     "penalty": {"correct": 1.0, "wrong": 0.3, "failed": -0.5},
     "normalized": {"correct": 1.0, "wrong": 0.6, "failed": 0.2},
 }
+
+
+@dataclass(frozen=True)
+class ScoreDetail:
+    reward: float
+    outcome: str  # "correct", "wrong" or "failed"
+    reason: str = ""  # why it failed, in a few words (see failure_reason)
+    error: str = ""  # the full error message, if any
+
+
+#: (text found in the SQLite error message, short reason), checked in order.
+_ERROR_REASONS = (
+    ("no result set", "empty or not a SELECT"),
+    ("no such column", "unknown column"),
+    ("no such table", "unknown table"),
+    ("ambiguous column", "ambiguous column"),
+    ("no such function", "unknown function"),
+    ("syntax error", "syntax error"),
+    ("incomplete input", "syntax error"),
+    ("unrecognized token", "syntax error"),
+)
+
+
+def failure_reason(status: str, error: str | None) -> str:
+    """A short, countable reason for a query that did not run."""
+    if status == "timeout":
+        return "timeout"
+    if status == "blocked":
+        return "blocked (not read-only)"
+    if status == "crashed":
+        return "verifier crashed"
+    msg = (error or "").lower()
+    for needle, reason in _ERROR_REASONS:
+        if needle in msg:
+            return reason
+    return "other error"
 
 
 def extract_sql(text: str) -> str:
@@ -98,14 +135,29 @@ class SQLRewardFunction:
                 self._gold_cache[key] = result
         return result
 
-    def _score_one(self, completion: str, gold_sql: str, db_id: str) -> float:
+    def _detail_one(self, completion: str, gold_sql: str, db_id: str) -> ScoreDetail:
         db = self.db_path(db_id)
         cand = execute_query(extract_sql(completion), db, timeout_s=self.timeout_s)
         if not cand.ok:
-            return self.rewards["failed"]
+            return ScoreDetail(self.rewards["failed"], "failed", failure_reason(cand.status, cand.error), cand.error or "")
         gold = self._gold_result(gold_sql, db_id, db)
         v = compare_results(cand, gold, gold_sql)
-        return self.rewards["correct"] if v.verdict == "correct" else self.rewards["wrong"]
+        if v.verdict == "correct":
+            return ScoreDetail(self.rewards["correct"], "correct")
+        # A gold query that fails (usually a timeout on a very large database)
+        # makes a right answer look wrong; report it so it can be told apart.
+        if not gold.ok:
+            reason = "gold query failed: " + failure_reason(gold.status, gold.error)
+            return ScoreDetail(self.rewards["wrong"], "wrong", reason, gold.error or "")
+        return ScoreDetail(self.rewards["wrong"], "wrong")
+
+    def _score_one(self, completion: str, gold_sql: str, db_id: str) -> float:
+        return self._detail_one(completion, gold_sql, db_id).reward
+
+    def details(self, completions, gold_sql, db_id) -> list[ScoreDetail]:
+        """Like ``__call__`` but with the outcome and, for failures, the reason."""
+        with ThreadPoolExecutor(max_workers=self.workers) as pool:
+            return list(pool.map(self._detail_one, completions, gold_sql, db_id))
 
     def __call__(self, prompts, completions, **kwargs) -> list[float]:
         gold_sqls = kwargs["gold_sql"]

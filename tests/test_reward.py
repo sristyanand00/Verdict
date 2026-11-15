@@ -82,3 +82,29 @@ def test_reward_schemes(tmp_path):
 def test_unknown_scheme_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="scheme"):
         SQLRewardFunction(db_root=tmp_path, scheme="nope")
+
+
+def test_details_explain_each_failure(tmp_path):
+    make_tiny_db(tmp_path)
+    fn = SQLRewardFunction(db_root=tmp_path)
+    out = fn.details(
+        ["```sql\nSELECT name FROM students WHERE year = 2\n```",
+         "```sql\nSELECT nope FROM students\n```",
+         "```sql\nSELECT * FROM nowhere\n```",
+         "```sql\nSELEC name\n```",
+         ""],
+        [GOLD] * 5, ["tiny"] * 5,
+    )
+    assert [d.outcome for d in out] == ["correct", "failed", "failed", "failed", "failed"]
+    assert [d.reason for d in out] == ["", "unknown column", "unknown table", "syntax error", "empty or not a SELECT"]
+    assert [d.reward for d in out] == fn(prompts=[], completions=[
+        "```sql\nSELECT name FROM students WHERE year = 2\n```", "```sql\nSELECT nope FROM students\n```",
+        "```sql\nSELECT * FROM nowhere\n```", "```sql\nSELEC name\n```", ""],
+        gold_sql=[GOLD] * 5, db_id=["tiny"] * 5)
+
+
+def test_failure_reason_for_timeouts_and_blocks():
+    from verdict.train.reward import failure_reason
+    assert failure_reason("timeout", "deadline exceeded") == "timeout"
+    assert failure_reason("blocked", "not authorized") == "blocked (not read-only)"
+    assert failure_reason("error", "OperationalError: something new") == "other error"

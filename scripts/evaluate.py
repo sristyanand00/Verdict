@@ -117,7 +117,16 @@ def main() -> int:
         for r in rows:
             f.write(json.dumps(r) + "\n")
     summary = print_summary(f"{args.label} ({args.model})", rows)
-    summary.update(model=str(args.model), seconds=result.seconds)
+    failures = result.failure_counts()
+    if failures:
+        print("\nWhy queries failed:")
+        for reason, n in failures.most_common():
+            print(f"  {reason:28s} {n}")
+    gold_failed = sum(r["reason"].startswith("gold query failed") for r in rows)
+    if gold_failed:
+        print(f"\n{gold_failed} answers ran but were marked wrong because the gold query itself failed.")
+    summary.update(model=str(args.model), seconds=result.seconds,
+                   failures=dict(failures), gold_failed=gold_failed)
     (out / f"eval_{args.label}_summary.json").write_text(json.dumps(summary, indent=2))
     print(f"\nTook {result.seconds / 60:.1f} minutes. Saved {out / f'eval_{args.label}.jsonl'}")
 

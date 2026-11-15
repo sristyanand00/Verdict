@@ -345,6 +345,8 @@ class SFTTrainer:
             f"  evaluated {len(tasks)} val tasks in {result.seconds:.0f}s: "
             f"{100 * result.accuracy:.1f}% correct, {100 * result.ran_rate:.1f}% ran"
         )
+        if result.failure_counts():
+            _log(f"  failed because: {result.failure_summary()}")
         self._last_ran = result.ran_rate
         return result.accuracy
 
