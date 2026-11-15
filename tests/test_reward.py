@@ -34,6 +34,15 @@ def test_reward_scale(tmp_path):
     assert out == [1.0, 0.1, 0.0, 0.0]
 
 
+def test_an_empty_answer_earns_nothing(tmp_path):
+    """Writing nothing must not be paid like a query that ran."""
+    make_tiny_db(tmp_path)
+    fn = SQLRewardFunction(db_root=tmp_path)
+    out = fn(prompts=["q"] * 3, completions=["", "```sql\n```", "```sql\n-- todo\n```"],
+             gold_sql=[GOLD] * 3, db_id=["tiny"] * 3)
+    assert out == [0.0, 0.0, 0.0]
+
+
 def test_reward_has_variance_in_all_failing_group(tmp_path):
     """The 0.1 tier gives a group of wrong answers non-zero reward variance."""
     make_tiny_db(tmp_path)

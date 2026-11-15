@@ -1,6 +1,7 @@
-"""Load BIRD dev questions into typed task records.
+"""Load BIRD questions into typed task records.
 
     load_bird_dev() -> list[BirdTask]
+    load_bird_train(json_path, db_root) -> list[BirdTask]
 
 Paths come from verdict.config, so the data can move (VERDICT_DATA_ROOT)
 without code changes. Unlike the verifier, the loader raises on bad input:
@@ -17,8 +18,10 @@ from typing import Literal
 
 from verdict import config
 
-Difficulty = Literal["simple", "moderate", "challenging"]
+#: BIRD train has no difficulty labels; its tasks are marked "unknown".
+Difficulty = Literal["simple", "moderate", "challenging", "unknown"]
 DIFFICULTIES: tuple[str, ...] = ("simple", "moderate", "challenging")
+UNKNOWN_DIFFICULTY = "unknown"
 _REQUIRED = ("question_id", "db_id", "question", "evidence", "SQL", "difficulty")
 
 
@@ -92,3 +95,50 @@ def load_bird_dev(
             f"databases not found under {root / 'dev_databases'}: {sorted(missing_dbs)}"
         )
     return tasks
+
+
+_TRAIN_REQUIRED = ("db_id", "question", "evidence", "SQL")
+
+
+def load_bird_train(path: str | Path, db_root: str | Path) -> list[BirdTask]:
+    """Read BIRD train questions.
+
+    ``db_root`` is the folder holding ``<db_id>/<db_id>.sqlite`` (BIRD's
+    ``train_databases``). BIRD train has no ``question_id`` or ``difficulty``
+    fields, so ``question_id`` is the question's position in the file and
+    difficulty is ``"unknown"``. Keep using the same file so that the ids
+    stay the same between runs.
+
+    Unlike ``load_bird_dev``, a missing database is allowed: supervised
+    fine-tuning only needs the schema text, which can come from a saved
+    schemas file (see ``SchemaStore``). Use ``has_database`` to keep only the
+    tasks whose queries can be run.
+    """
+    path, root = Path(path), Path(db_root)
+    with open(path, encoding="utf-8") as f:
+        raw = json.load(f)
+    if not isinstance(raw, list):
+        raise ValueError(f"{path}: expected a JSON list of questions")
+
+    tasks: list[BirdTask] = []
+    for i, item in enumerate(raw):
+        absent = [k for k in _TRAIN_REQUIRED if k not in item]
+        if absent:
+            raise ValueError(f"{path}: item {i} is missing {absent}")
+        tasks.append(
+            BirdTask(
+                question_id=i,
+                db_id=item["db_id"],
+                question=item["question"].strip(),
+                evidence=(item["evidence"] or "").strip(),
+                gold_sql=item["SQL"].strip(),
+                difficulty=UNKNOWN_DIFFICULTY,
+                db_path=root / item["db_id"] / f"{item['db_id']}.sqlite",
+            )
+        )
+    return tasks
+
+
+def has_database(task: BirdTask) -> bool:
+    """True if the task's database file exists, so its SQL can be executed."""
+    return task.db_path is not None and Path(task.db_path).exists()

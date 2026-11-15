@@ -1,5 +1,8 @@
 """Batching and train/validation splits over BIRD tasks."""
 
+import random
+from collections.abc import Callable
+
 from verdict.data.loaders import DIFFICULTIES, BirdTask
 
 
@@ -12,8 +15,29 @@ def batch_by_difficulty(tasks: list[BirdTask]) -> dict[str, list[BirdTask]]:
     """Group tasks by difficulty: ``{"simple": [...], "moderate": [...], "challenging": [...]}``."""
     groups: dict[str, list[BirdTask]] = {d: [] for d in DIFFICULTIES}
     for task in tasks:
-        groups[task.difficulty].append(task)
+        # BIRD train tasks are "unknown"; they get a group of their own.
+        groups.setdefault(task.difficulty, []).append(task)
     return groups
+
+
+def holdout_split(
+    tasks: list[BirdTask],
+    val_size: int,
+    seed: int = 0,
+    eligible: Callable[[BirdTask], bool] = lambda t: True,
+) -> tuple[list[BirdTask], list[BirdTask]]:
+    """Hold out ``val_size`` random tasks for validation; the rest train.
+
+    Only tasks for which ``eligible`` is true can be held out (for example,
+    tasks whose database exists, so their answers can be checked). The choice
+    depends only on ``seed`` and the task ids, so SFT and GRPO runs that use
+    the same seed hold out the same questions and never train on them.
+    """
+    candidates = sorted((t for t in tasks if eligible(t)), key=lambda t: t.question_id)
+    val = random.Random(seed).sample(candidates, min(val_size, len(candidates)))
+    held = {t.question_id for t in val}
+    train = [t for t in tasks if t.question_id not in held]
+    return train, sorted(val, key=lambda t: t.question_id)
 
 
 def create_train_val_split(

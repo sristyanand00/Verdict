@@ -65,7 +65,9 @@ def get_schema_cached(db_path: Path, cache_dir: Path | None = None) -> str:
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_file = cache_dir / f"{Path(db_path).stem}.schema.txt"
 
-    if cache_file.exists() and cache_file.stat().st_mtime > Path(db_path).stat().st_mtime:
+    # >= because a cache written right after the database can share its
+    # timestamp on file systems with coarse time resolution.
+    if cache_file.exists() and cache_file.stat().st_mtime >= Path(db_path).stat().st_mtime:
         return cache_file.read_text(encoding="utf-8")
 
     schema = get_schema(db_path)

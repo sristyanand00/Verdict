@@ -5,7 +5,7 @@ import pytest
 
 from tests.fixtures import make_tiny_db
 from verdict import config
-from verdict.data.loaders import BirdTask, load_bird_dev
+from verdict.data.loaders import BirdTask, has_database, load_bird_dev, load_bird_train
 
 ITEM = {
     "question_id": 0,
@@ -73,3 +73,26 @@ def test_real_bird_dev():
     assert len(tasks) == 1534
     assert len({t.db_id for t in tasks}) == 11
     assert Counter(t.difficulty for t in tasks) == {"simple": 925, "moderate": 464, "challenging": 145}
+
+
+def test_bird_train_ids_follow_file_order_and_missing_databases_are_allowed(tmp_path):
+    make_tiny_db(tmp_path / "train_databases")
+    items = [
+        {"db_id": "tiny", "question": " Q one ", "evidence": None, "SQL": "SELECT 1\n"},
+        {"db_id": "gone", "question": "Q two", "evidence": "hint", "SQL": "SELECT 2"},
+    ]
+    path = tmp_path / "train.json"
+    path.write_text(json.dumps(items), encoding="utf-8")
+
+    a, b = load_bird_train(path, tmp_path / "train_databases")
+    assert (a.question_id, b.question_id) == (0, 1)
+    assert a.question == "Q one" and a.evidence == "" and a.gold_sql == "SELECT 1"
+    assert a.difficulty == b.difficulty == "unknown"
+    assert has_database(a) and not has_database(b)
+
+
+def test_bird_train_rejects_items_without_sql(tmp_path):
+    path = tmp_path / "train.json"
+    path.write_text(json.dumps([{"db_id": "x", "question": "q", "evidence": ""}]), encoding="utf-8")
+    with pytest.raises(ValueError, match="SQL"):
+        load_bird_train(path, tmp_path)

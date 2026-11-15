@@ -16,10 +16,15 @@ There is no KL penalty against a reference model: it would need a second copy
 of the model in GPU memory, and Dr. GRPO / DAPO report it is not needed for
 verifiable-reward tasks at this scale.
 
-Precision: weights and optimizer state are float32; forward passes run in
-float16 autocast with a GradScaler. Kaggle's T4 and P100 have no bfloat16, and
-training float16 weights directly with AdamW produces NaNs (its epsilon, 1e-8,
-rounds to zero in float16).
+Precision: trained weights and optimizer state are float32; forward passes
+run in float16 autocast with a GradScaler. Kaggle's T4 and P100 have no
+bfloat16, and training float16 weights directly with AdamW produces NaNs (its
+epsilon, 1e-8, rounds to zero in float16).
+
+LoRA: with ``lora_r > 0`` only small adapter matrices are trained and the
+frozen base weights are kept in float16 (see ``verdict.train.modeling``). This
+is what fits a 1.5B model on a T4. ``init_adapter`` starts from an existing
+adapter, such as the result of supervised fine-tuning.
 """
 
 import json
@@ -34,12 +39,22 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM
 
 from verdict.data.loaders import BirdTask
-from verdict.data.schema import get_schema
-from verdict.train.data_prep import build_prompt
+from verdict.train.data_prep import SchemaStore, render_prompt
+from verdict.train.evaluation import evaluate_tasks
 from verdict.train.grpo_utils import group_advantages, repeat_per_group
+from verdict.train.modeling import (
+    LoraSettings,
+    adapter_base_model,
+    completion_token_logprobs,
+    count_parameters,
+    is_adapter_dir,
+    load_tokenizer,
+    prepare_for_training,
+    trainable_parameters,
+)
 from verdict.train.reward import SQLRewardFunction
 from verdict.train.rollout import GenerationConfig, generate_ids
 
@@ -53,7 +68,7 @@ class GRPOTrainingConfig:
     num_epochs: int = 3
     batch_size: int = 4  # questions per batch; each yields num_generations completions
     gradient_accumulation_steps: int = 1  # batches per optimizer step
-    learning_rate: float = 1e-6  # TRL's GRPO default; 1e-5 is unstable for full fine-tuning
+    learning_rate: float = 1e-6  # TRL's GRPO default for full fine-tuning; LoRA needs about 1e-5
     weight_decay: float = 0.0
     max_grad_norm: float = 1.0
     seed: int = 42
@@ -78,6 +93,15 @@ class GRPOTrainingConfig:
     max_schema_chars: int = 6000
     schema_sample_rows: int = 2
     include_evidence: bool = True
+    # Saved schemas for databases that are not on disk (BIRD train preparation).
+    schemas_file: Path | None = None
+
+    # LoRA. 0 trains every weight. init_adapter continues from a saved adapter
+    # (for example the SFT result); its base model replaces model_name.
+    lora_r: int = 0
+    lora_alpha: int = 32
+    lora_dropout: float = 0.05
+    init_adapter: Path | None = None
 
     # Validation: greedy accuracy on up to this many val tasks per epoch.
     eval_max_tasks: int | None = 100
@@ -116,15 +140,19 @@ class GRPOTrainer:
         random.seed(config.seed)
         torch.manual_seed(config.seed)
 
-        _log(f"Loading model: {config.model_name}")
-        self.tokenizer = self._load_tokenizer(config.model_name)
-        self.model = self._load_model(config.model_name)
+        source = config.model_name
+        if config.init_adapter is not None:
+            source = adapter_base_model(config.init_adapter)
+            _log(f"Starting from adapter {config.init_adapter} (base model {source})")
+        _log(f"Loading model: {source}")
+        self.tokenizer = self._load_tokenizer(source)
+        self.model = self._load_model(source, adapter_path=config.init_adapter)
+        trainable, total = count_parameters(self.model)
+        _log(f"Trainable parameters: {trainable:,} of {total:,} ({100 * trainable / total:.2f}%)")
 
         self.use_amp = config.amp and self.device.type == "cuda"
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
-        self.optimizer = torch.optim.AdamW(
-            self.model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay
-        )
+        self.optimizer = self._new_optimizer()
 
         self.reward_fn = SQLRewardFunction(
             db_root=self.db_root,
@@ -132,7 +160,9 @@ class GRPOTrainer:
             workers=config.reward_workers,
             scheme=config.reward_scheme,
         )
-        self._schemas: dict[str, str] = {}
+        self.schemas = SchemaStore(
+            self.db_root, config.schemas_file, config.schema_sample_rows, config.max_schema_chars
+        )
         self._prompts: dict[int, str] = {}
         self._micro_steps = 0  # batches whose gradients are accumulated but not yet applied
         self._has_grads = False
@@ -144,66 +174,58 @@ class GRPOTrainer:
 
     # ------------------------------------------------------------------ loading
 
-    def _load_model(self, source: str | Path):
+    def _lora(self) -> LoraSettings:
+        c = self.config
+        return LoraSettings(r=c.lora_r, alpha=c.lora_alpha, dropout=c.lora_dropout)
+
+    def _load_model(self, source: str | Path, adapter_path: str | Path | None = None):
         # Loaded without a dtype argument and cast afterwards: the keyword is
         # `torch_dtype` in older transformers and `dtype` in newer ones.
         model = AutoModelForCausalLM.from_pretrained(source)
-        model.to(device=self.device, dtype=torch.float32)
-        if self.config.gradient_checkpointing:
-            # Renamed in newer transformers; Kaggle images may have either.
-            if hasattr(model, "activation_checkpointing_enable"):
-                model.activation_checkpointing_enable(activation_checkpointing_kwargs={"use_reentrant": False})
-            else:
-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
-            model.config.use_cache = False
-        model.train()
-        return model
+        return prepare_for_training(
+            model, self.device, self._lora(), adapter_path=adapter_path,
+            gradient_checkpointing=self.config.gradient_checkpointing,
+        )
 
     @staticmethod
     def _load_tokenizer(source: str | Path):
-        tokenizer = AutoTokenizer.from_pretrained(source)
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
-        return tokenizer
+        return load_tokenizer(source)
+
+    def _new_optimizer(self):
+        return torch.optim.AdamW(
+            trainable_parameters(self.model), lr=self.config.learning_rate,
+            weight_decay=self.config.weight_decay,
+        )
 
     # ------------------------------------------------------------------ prompts
-
-    def _schema(self, db_id: str) -> str:
-        if db_id not in self._schemas:
-            db = self.db_root / db_id / f"{db_id}.sqlite"
-            limit = self.config.max_schema_chars
-            schema = get_schema(db, num_samples=self.config.schema_sample_rows)
-            if len(schema) > limit:
-                schema = get_schema(db, num_samples=0)  # drop sample rows first
-            if len(schema) > limit:
-                cut = schema.rfind("\n", 0, limit)
-                schema = schema[: cut if cut > 0 else limit] + "\n-- (schema truncated)"
-            self._schemas[db_id] = schema
-        return self._schemas[db_id]
 
     def prompt_for(self, task: BirdTask) -> str:
         """The exact text fed to the model for ``task``."""
         if task.question_id not in self._prompts:
-            messages = build_prompt(task, self._schema(task.db_id), self.config.include_evidence)
-            if getattr(self.tokenizer, "chat_template", None):
-                text = self.tokenizer.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=True
-                )
-            else:
-                text = "\n\n".join(m["content"] for m in messages) + "\n\n```sql\n"
-            self._prompts[task.question_id] = text
+            self._prompts[task.question_id] = render_prompt(
+                self.tokenizer, task, self.schemas(task.db_id), self.config.include_evidence
+            )
         return self._prompts[task.question_id]
 
     def _usable(self, tasks: list[BirdTask]) -> list[BirdTask]:
-        """Drop tasks whose database cannot be read, with a warning."""
-        ok = []
+        """Drop tasks whose database cannot be read, with a warning.
+
+        GRPO runs every answer, so the database itself is required, not only
+        its schema.
+        """
+        ok, skipped = [], 0
         for t in tasks:
+            if not (self.db_root / t.db_id / f"{t.db_id}.sqlite").exists():
+                skipped += 1
+                continue
             try:
                 self.prompt_for(t)
             except (FileNotFoundError, sqlite3.Error) as e:
                 logger.warning("skipping question %s: %s", t.question_id, e)
                 continue
             ok.append(t)
+        if skipped:
+            _log(f"Skipped {skipped} questions whose database is not in {self.db_root}")
         return ok
 
     # ----------------------------------------------------------------- training
@@ -371,34 +393,11 @@ class GRPOTrainer:
 
     def _sequence_logprobs(self, chunk: list[tuple[list[int], list[int], float]]) -> torch.Tensor:
         """Summed log-probability of each completion's tokens given its prompt."""
-        pad = self.tokenizer.pad_token_id
-        seqs = [p + c for p, c, _ in chunk]
-        width = max(len(s) for s in seqs)
-        input_ids = torch.full((len(seqs), width), pad, dtype=torch.long)
-        attention = torch.zeros((len(seqs), width), dtype=torch.long)
-        rows, cols, targets = [], [], []
-        for j, (p, c, _) in enumerate(chunk):
-            input_ids[j, : len(p) + len(c)] = torch.tensor(p + c)
-            attention[j, : len(p) + len(c)] = 1
-            # The hidden state at position k predicts token k + 1.
-            rows.extend([j] * len(c))
-            cols.extend(range(len(p) - 1, len(p) - 1 + len(c)))
-            targets.extend(c)
-        input_ids, attention = input_ids.to(self.device), attention.to(self.device)
-        rows_t = torch.tensor(rows, device=self.device)
-        cols_t = torch.tensor(cols, device=self.device)
-        targets_t = torch.tensor(targets, device=self.device)
-
-        # The language-model head is applied only to completion positions.
-        # Full logits for a ~1500-token prompt with Qwen's 151k vocabulary
-        # would be gigabytes per sequence.
-        with self._autocast():
-            hidden = self.model.get_decoder()(
-                input_ids=input_ids, attention_mask=attention, use_cache=False
-            ).last_hidden_state
-            logits = self.model.get_output_embeddings()(hidden[rows_t, cols_t])
-        token_logp = torch.log_softmax(logits.float(), dim=-1).gather(1, targets_t[:, None]).squeeze(1)
-        return torch.zeros(len(chunk), device=self.device).index_add(0, rows_t, token_logp)
+        token_logp, rows = completion_token_logprobs(
+            self.model, [(p, c) for p, c, _ in chunk], self.tokenizer.pad_token_id,
+            self.device, self._autocast(),
+        )
+        return torch.zeros(len(chunk), device=self.device).index_add(0, rows, token_logp)
 
     def _optimizer_step(self) -> None:
         self._micro_steps = 0
@@ -407,7 +406,7 @@ class GRPOTrainer:
             return
         self._has_grads = False
         self.scaler.unscale_(self.optimizer)
-        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
+        grad_norm = torch.nn.utils.clip_grad_norm_(trainable_parameters(self.model), self.config.max_grad_norm)
         if torch.isfinite(grad_norm):
             self.scaler.step(self.optimizer)
             self.global_step += 1
@@ -422,20 +421,15 @@ class GRPOTrainer:
         """Greedy (temperature 0) execution accuracy on ``tasks``."""
         if not tasks:
             return 0.0
-        t0 = time.time()
-        rollouts = generate_ids(
-            self.model, self.tokenizer, [self.prompt_for(t) for t in tasks], n_completions=1,
-            amp=self.use_amp, config=GenerationConfig(temperature=0, max_tokens=self.config.max_tokens),
+        result = evaluate_tasks(
+            self.model, self.tokenizer, [self.prompt_for(t) for t in tasks], tasks, self.reward_fn,
+            max_tokens=self.config.max_tokens, amp=self.use_amp,
         )
-        rewards = self.reward_fn(
-            prompts=[],
-            completions=[r.texts[0] for r in rollouts],
-            gold_sql=[t.gold_sql for t in tasks],
-            db_id=[t.db_id for t in tasks],
+        _log(
+            f"  evaluated {len(tasks)} val tasks in {result.seconds:.0f}s: "
+            f"{100 * result.accuracy:.1f}% correct, {100 * result.ran_rate:.1f}% ran"
         )
-        acc = sum(r == self.reward_fn.rewards["correct"] for r in rewards) / len(tasks)
-        _log(f"  evaluated {len(tasks)} val tasks in {time.time() - t0:.0f}s: {100 * acc:.1f}% correct")
-        return acc
+        return result.accuracy
 
     # -------------------------------------------------------------- checkpoints
 
@@ -443,7 +437,8 @@ class GRPOTrainer:
         """Save to ``<checkpoint_dir>/<name>/``, replacing the previous one.
 
         Only ``latest`` and ``best`` are kept: each is ~2 GB for a 0.5B model
-        and Kaggle's /kaggle/working is limited to 20 GB.
+        and Kaggle's /kaggle/working is limited to 20 GB. With LoRA only the
+        adapter is saved (tens of MB).
         """
         path = self.checkpoint_dir / name
         tmp = self.checkpoint_dir / f".{name}.tmp"
@@ -469,11 +464,13 @@ class GRPOTrainer:
         model_dir = path / "model" if (path / "model").is_dir() else path
         tok_dir = path / "tokenizer" if (path / "tokenizer").is_dir() else path
         _log(f"Loading checkpoint: {path}")
-        self.model = self._load_model(model_dir)
+        if is_adapter_dir(model_dir):
+            self.model = self._load_model(adapter_base_model(model_dir), adapter_path=model_dir)
+        else:
+            self.model = self._load_model(model_dir)
         self.tokenizer = self._load_tokenizer(tok_dir)
-        self.optimizer = torch.optim.AdamW(
-            self.model.parameters(), lr=self.config.learning_rate, weight_decay=self.config.weight_decay
-        )
+        self.optimizer = self._new_optimizer()
+        self._prompts.clear()
         state = path / "training_state.json"
         if state.exists():
             data = json.loads(state.read_text())
