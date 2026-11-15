@@ -25,9 +25,9 @@ def main():
     # Check GPU
     import torch
     if torch.cuda.is_available():
-        logger.info(f"✅ GPU: {torch.cuda.get_device_name(0)}")
+        logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
     else:
-        logger.warning("⚠️  No GPU! Will be slow.")
+        logger.warning("No GPU! Will be slow.")
     
     # Load data
     logger.info("Loading BIRD...")
@@ -54,16 +54,16 @@ def main():
         result = trainer.fit(tasks)
         
         logger.info("\n" + "=" * 60)
-        logger.info("✅ TEST PASSED!")
+        logger.info("TEST PASSED!")
         logger.info("=" * 60)
         logger.info("Training loop works correctly!")
         logger.info(f"Reward mean: {result['metrics']['reward_mean']}")
         logger.info(f"Accuracy: {result['metrics']['accuracy']}")
-        logger.info("\n✅ Ready for full training!")
+        logger.info("\nReady for full training!")
         logger.info("Run: python scripts/train_qwen.py --questions 100 --epochs 3")
         
     except Exception as e:
-        logger.error(f"\n❌ TEST FAILED: {e}")
+        logger.error(f"\nTEST FAILED: {e}")
         import traceback
         traceback.print_exc()
         logger.error("\nFix errors before running full training!")
