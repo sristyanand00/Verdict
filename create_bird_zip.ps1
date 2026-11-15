@@ -61,7 +61,7 @@ if (Test-Path $devDatabasesPath) {
 # Close the ZIP
 $zip.Dispose()
 
-Write-Host "`n✓ ZIP created successfully!" -ForegroundColor Green
+Write-Host "`nZIP created successfully!" -ForegroundColor Green
 Write-Host "Location: $zipPath" -ForegroundColor Cyan
 
 # Show file size
@@ -82,12 +82,12 @@ $zipArchive.Entries | Select-Object -First 10 | ForEach-Object {
 # Check for backslashes
 $hasBackslashes = $zipArchive.Entries | Where-Object { $_.FullName -match '\\' }
 if ($hasBackslashes) {
-    Write-Host "`n⚠ WARNING: Found backslashes in ZIP paths!" -ForegroundColor Red
+    Write-Host "`nWARNING: Found backslashes in ZIP paths!" -ForegroundColor Red
     $hasBackslashes | Select-Object -First 5 | ForEach-Object {
         Write-Host "  $($_.FullName)" -ForegroundColor Red
     }
 } else {
-    Write-Host "`n✓ All paths use forward slashes (cross-platform compatible)" -ForegroundColor Green
+    Write-Host "`nAll paths use forward slashes (cross-platform compatible)" -ForegroundColor Green
 }
 
 Write-Host "`nTotal entries in ZIP: $($zipArchive.Entries.Count)" -ForegroundColor Cyan
@@ -95,4 +95,4 @@ Write-Host "`nTotal entries in ZIP: $($zipArchive.Entries.Count)" -ForegroundCol
 # Close verification
 $zipArchive.Dispose()
 
-Write-Host "`n✓ Ready for Kaggle upload!" -ForegroundColor Green
+Write-Host "`nReady for Kaggle upload!" -ForegroundColor Green

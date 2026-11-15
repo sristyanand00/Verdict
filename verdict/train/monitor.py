@@ -177,7 +177,7 @@ class TrainingMonitor:
         with open(output_path, "w") as f:
             json.dump(data, f, indent=2)
         
-        self.logger.info(f"✓ Saved metrics to {output_path}")
+        self.logger.info(f"Saved metrics to {output_path}")
         return output_path
     
     def plot_loss_curve(self, output_file: Optional[str] = None) -> None:
@@ -209,7 +209,7 @@ class TrainingMonitor:
         if output_file:
             output_path = self.output_dir / output_file
             plt.savefig(output_path, dpi=100, bbox_inches="tight")
-            self.logger.info(f"✓ Saved plot to {output_path}")
+            self.logger.info(f"Saved plot to {output_path}")
         else:
             plt.show()
         
@@ -264,7 +264,7 @@ class TrainingMonitor:
         if output_file:
             output_path = self.output_dir / output_file
             plt.savefig(output_path, dpi=100, bbox_inches="tight")
-            self.logger.info(f"✓ Saved plot to {output_path}")
+            self.logger.info(f"Saved plot to {output_path}")
         else:
             plt.show()
         

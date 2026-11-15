@@ -63,12 +63,12 @@ def create_bird_zip():
             print(f"  {entry}")
         
         if bad_paths:
-            print(f"\n⚠️  WARNING: Found {len(bad_paths)} entries with backslashes!")
+            print(f"\nWARNING: Found {len(bad_paths)} entries with backslashes!")
             for path in bad_paths[:5]:
                 print(f"  {path}")
         else:
-            print(f"\n✓ SUCCESS: All {total} entries use forward slashes!")
-            print("✓ This ZIP is ready for Kaggle upload!")
+            print(f"\nSUCCESS: All {total} entries use forward slashes!")
+            print("This ZIP is ready for Kaggle upload!")
     
     # Show file size
     size_mb = zip_path.stat().st_size / (1024 * 1024)

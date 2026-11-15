@@ -67,20 +67,20 @@ def main():
     # Check GPU
     import torch
     if torch.cuda.is_available():
-        logger.info(f"✅ GPU available: {torch.cuda.get_device_name(0)}")
+        logger.info(f"GPU available: {torch.cuda.get_device_name(0)}")
         logger.info(f"   CUDA version: {torch.version.cuda}")
         logger.info(f"   GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
     else:
         # No input() prompt here: it would hang a non-interactive Kaggle run.
-        logger.warning("⚠️  No GPU detected! Training will be VERY slow on CPU.")
+        logger.warning("No GPU detected! Training will be VERY slow on CPU.")
     
     # Load BIRD data
     logger.info("\nLoading BIRD dataset...")
     try:
         all_tasks = load_bird_dev()
-        logger.info(f"✅ Loaded {len(all_tasks)} BIRD dev questions")
+        logger.info(f"Loaded {len(all_tasks)} BIRD dev questions")
     except Exception as e:
-        logger.error(f"❌ Failed to load BIRD dataset: {e}")
+        logger.error(f"Failed to load BIRD dataset: {e}")
         logger.error("Make sure BIRD dataset is in datasets/ folder")
         return
     
@@ -122,9 +122,9 @@ def main():
     
     try:
         trainer = GRPOTrainer(config, db_root=data_root() / "dev_databases")
-        logger.info("✅ Trainer initialized")
+        logger.info("Trainer initialized")
     except Exception as e:
-        logger.error(f"❌ Failed to initialize trainer: {e}")
+        logger.error(f"Failed to initialize trainer: {e}")
         import traceback
         traceback.print_exc()
         return
@@ -163,7 +163,7 @@ def main():
         logger.info(f"Checkpoints saved to: {args.checkpoint_dir}")
         logger.info("You can resume training from the last checkpoint")
     except Exception as e:
-        logger.error(f"\n\n❌ Training failed: {e}")
+        logger.error(f"\n\nTraining failed: {e}")
         import traceback
         traceback.print_exc()
 
