@@ -42,25 +42,31 @@ def _tiny_model(vocab_size, eos_id, pad_id):
 
 
 @pytest.fixture
-def trainer(tmp_path, monkeypatch):
+def make_trainer(tmp_path, monkeypatch):
+    """Build a trainer on a tiny random model; keyword arguments override the config."""
     make_tiny_db(tmp_path / "dbs")
     tok = _tiny_tokenizer()
-    model = _tiny_model(len(tok), tok.eos_token_id, tok.pad_token_id)
     monkeypatch.setattr(GRPOTrainer, "_load_tokenizer", staticmethod(lambda source: tok))
-    real_load = GRPOTrainer._load_model
+    # Every from_pretrained gets the same fresh-per-test tiny model, so the
+    # real post-load steps (dtype, device, LoRA, checkpointing) run on it.
+    model = _tiny_model(len(tok), tok.eos_token_id, tok.pad_token_id)
+    monkeypatch.setattr(grpo_mod.AutoModelForCausalLM, "from_pretrained", lambda s: model)
 
-    def load_model(self, source):
-        # Run the real post-load steps (dtype, device, checkpointing) on the tiny model.
-        monkeypatch.setattr(grpo_mod.AutoModelForCausalLM, "from_pretrained", lambda s: model)
-        return real_load(self, source)
+    def build(**overrides):
+        cfg = GRPOTrainingConfig(**{
+            "model_name": "tiny", "num_epochs": 1, "batch_size": 2, "num_generations": 3,
+            "max_tokens": 8, "micro_batch_size": 2, "learning_rate": 1e-2, "eval_max_tasks": 2,
+            "checkpoint_dir": tmp_path / "ckpt", "device": "cpu", "reward_workers": 2,
+            **overrides,
+        })
+        return GRPOTrainer(cfg, db_root=tmp_path / "dbs")
 
-    monkeypatch.setattr(GRPOTrainer, "_load_model", load_model)
-    cfg = GRPOTrainingConfig(
-        model_name="tiny", num_epochs=1, batch_size=2, num_generations=3, max_tokens=8,
-        micro_batch_size=2, learning_rate=1e-2, eval_max_tasks=2,
-        checkpoint_dir=tmp_path / "ckpt", device="cpu", reward_workers=2,
-    )
-    return GRPOTrainer(cfg, db_root=tmp_path / "dbs")
+    return build
+
+
+@pytest.fixture
+def trainer(make_trainer):
+    return make_trainer()
 
 
 def _task(qid):
@@ -130,3 +136,68 @@ def test_fit_updates_weights_and_saves_checkpoints(trainer):
     assert (latest / "config.json").exists()
     assert json.loads((latest / "training_state.json").read_text())["epoch"] == 1
     assert (trainer.checkpoint_dir / "best").is_dir()
+
+
+def test_tasks_without_a_database_are_skipped(trainer):
+    other = BirdTask(
+        question_id=9, db_id="not_here", question="q", evidence="", gold_sql="SELECT 1",
+        difficulty="unknown", db_path=None,
+    )
+    assert [t.question_id for t in trainer._usable([_task(1), other])] == [1]
+
+
+# ----------------------------------------------------------------------- LoRA
+
+
+def test_lora_trains_only_the_adapter(make_trainer):
+    pytest.importorskip("peft")
+    trainer = make_trainer(lora_r=4, lora_alpha=8, lora_dropout=0.0)
+    trainer.reward_fn = _SpreadReward()
+    named = dict(trainer.model.named_parameters())
+    frozen = {n: p.detach().clone() for n, p in named.items() if not p.requires_grad}
+    trained = {n: p.detach().clone() for n, p in named.items() if p.requires_grad}
+    assert trained and all("lora_" in n for n in trained)
+    assert all(p.dtype == torch.float32 for n, p in named.items() if p.requires_grad)
+
+    trainer.fit([_task(1), _task(2), _task(3)], val_tasks=[_task(4)])
+
+    after = dict(trainer.model.named_parameters())
+    assert all(torch.equal(after[n], p) for n, p in frozen.items()), "a frozen weight changed"
+    assert any(not torch.equal(after[n], p) for n, p in trained.items()), "no adapter weight changed"
+    latest = trainer.checkpoint_dir / "latest"
+    assert (latest / "adapter_config.json").exists()
+    assert not (latest / "model.safetensors").exists(), "LoRA checkpoint should hold only the adapter"
+
+
+def test_lora_logprobs_match_a_plain_forward_pass(make_trainer):
+    pytest.importorskip("peft")
+    trainer = make_trainer(lora_r=4, lora_dropout=0.0)
+    p, c = [5, 6, 7, 8], [9, 10, 11]
+    got = trainer._sequence_logprobs([(p, c, 1.0)])
+    with torch.no_grad():
+        logits = trainer.model(input_ids=torch.tensor([p + c])).logits[0]
+    expected = torch.log_softmax(logits.float(), -1)[torch.arange(3, 6), torch.tensor(c)].sum()
+    assert got[0].item() == pytest.approx(expected.item(), rel=1e-4)
+
+
+def test_adapter_checkpoint_loads_for_inference(make_trainer, monkeypatch):
+    pytest.importorskip("peft")
+    from verdict.train import modeling
+
+    trainer = make_trainer(lora_r=4, lora_dropout=0.0)
+    trainer.reward_fn = _SpreadReward()
+    trainer.fit([_task(1), _task(2)], val_tasks=[])
+    tok = trainer.tokenizer
+    # A fresh copy of the same base weights, as from_pretrained would give.
+    monkeypatch.setattr(modeling.AutoModelForCausalLM, "from_pretrained",
+                        lambda s: _tiny_model(len(tok), tok.eos_token_id, tok.pad_token_id))
+    monkeypatch.setattr(modeling, "load_tokenizer", lambda s: tok)
+
+    merged, _ = modeling.load_for_inference(trainer.checkpoint_dir / "latest", device="cpu")
+
+    ids = torch.tensor([[5, 6, 7, 8, 9]])
+    trainer.model.eval()
+    with torch.no_grad():
+        expected = trainer.model(input_ids=ids).logits
+        got = merged(input_ids=ids).logits
+    assert torch.allclose(got, expected, atol=1e-4)

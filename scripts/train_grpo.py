@@ -1,18 +1,23 @@
 #!/usr/bin/env python
-"""Train a text-to-SQL model with GRPO on BIRD dev.
+"""Train a text-to-SQL model with GRPO.
 
-Usage:
-    python scripts/train_grpo.py                                # defaults (fits a 16 GB T4)
-    python scripts/train_grpo.py --num-tasks 16 --epochs 1      # quick smoke run
-    python scripts/train_grpo.py --checkpoint-dir /kaggle/working/checkpoints
+Two data sources:
+
+  BIRD dev (Phase 1 practice; a model trained on dev cannot be scored on dev):
+    python scripts/train_grpo.py --num-tasks 300 --epochs 2
+
+  BIRD train (Phase 2), usually with LoRA and starting from the SFT adapter:
+    python scripts/train_grpo.py --train-dir /path/to/bird_train \\
+        --init-adapter /path/to/sft/best --lora-r 16 --task-ids kept_ids.json
+
+--train-dir is the folder made when BIRD train was prepared on Kaggle:
+train_all.json, schemas.json and train_databases/. Validation questions are
+held out with the same seed as scripts/train_sft.py, so GRPO never trains on
+the questions SFT was checked on.
 
 Environment:
-    VERDICT_DATA_ROOT     folder holding dev.json and dev_databases/ (default: datasets/)
+    VERDICT_DATA_ROOT     folder holding dev.json and dev_databases/ (dev mode)
     VERDICT_RESULTS_ROOT  where training_results.json is written (default: results/)
-    CUDA_VISIBLE_DEVICES  GPUs to use (only the first is used)
-
-Note: BIRD dev is also BIRD's evaluation set. A model trained on it cannot be
-scored on BIRD dev; use this for development, and BIRD train for real results.
 """
 
 import argparse
@@ -28,13 +33,18 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from verdict.config import data_root, results_root  # noqa: E402
-from verdict.data.loaders import load_bird_dev  # noqa: E402
-from verdict.train.batch import create_train_val_split, stratified_train_val_split  # noqa: E402
+from verdict.data.loaders import has_database, load_bird_dev, load_bird_train  # noqa: E402
+from verdict.train.batch import (  # noqa: E402
+    create_train_val_split,
+    holdout_split,
+    stratified_train_val_split,
+)
 from verdict.train.grpo import GRPOTrainer, GRPOTrainingConfig  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 DEFAULTS = GRPOTrainingConfig()
+LORA_LR = 1e-5
 
 
 def parse_args() -> argparse.Namespace:
@@ -46,7 +56,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--model", default=DEFAULTS.model_name, help="Hugging Face model name")
     p.add_argument("--epochs", type=int, default=DEFAULTS.num_epochs)
     p.add_argument("--batch-size", type=int, default=DEFAULTS.batch_size, help="questions per batch")
-    p.add_argument("--lr", type=float, default=DEFAULTS.learning_rate, help="learning rate")
+    p.add_argument("--lr", type=float, default=None,
+                   help=f"learning rate (default {DEFAULTS.learning_rate} full fine-tuning, {LORA_LR} LoRA)")
     p.add_argument("--num-generations", type=int, default=DEFAULTS.num_generations, help="completions per question")
     p.add_argument("--max-tokens", type=int, default=DEFAULTS.max_tokens, help="max new tokens per completion")
     p.add_argument("--temperature", type=float, default=DEFAULTS.temperature)
@@ -57,11 +68,51 @@ def parse_args() -> argparse.Namespace:
                    help="validation questions evaluated per epoch")
     p.add_argument("--checkpoint-dir", default="checkpoints")
     p.add_argument("--num-tasks", type=int, default=None, help="use only N tasks (sampled across databases)")
-    p.add_argument("--train-ratio", type=float, default=0.8)
     p.add_argument("--seed", type=int, default=DEFAULTS.seed)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    p.add_argument("--no-stratified", action="store_true", help="split without preserving difficulty mix")
+
+    dev = p.add_argument_group("BIRD dev mode")
+    dev.add_argument("--train-ratio", type=float, default=0.8)
+    dev.add_argument("--no-stratified", action="store_true", help="split without preserving difficulty mix")
+
+    train = p.add_argument_group("BIRD train mode")
+    train.add_argument("--train-dir", type=Path, default=None,
+                       help="folder with train_all.json, schemas.json and train_databases/")
+    train.add_argument("--val-size", type=int, default=200, help="questions held out for validation")
+    train.add_argument("--split-seed", type=int, default=0, help="must match the SFT run")
+    train.add_argument("--task-ids", type=Path, default=None,
+                       help="JSON list of question ids to train on (from scripts/pass_rate.py)")
+
+    lora = p.add_argument_group("LoRA")
+    lora.add_argument("--lora-r", type=int, default=DEFAULTS.lora_r, help="0 trains every weight")
+    lora.add_argument("--lora-alpha", type=int, default=DEFAULTS.lora_alpha)
+    lora.add_argument("--init-adapter", type=Path, default=None, help="start from this saved adapter (e.g. SFT best/)")
     return p.parse_args()
+
+
+def load_tasks(args):
+    """(all_tasks, train_tasks, val_tasks, db_root)."""
+    if args.train_dir is None:
+        all_tasks = load_bird_dev(data_root=data_root())
+        if args.num_tasks:
+            # BIRD dev is sorted by database, so the first N would all be one or two
+            # databases. Take every k-th task instead to keep the variety.
+            step = max(len(all_tasks) // args.num_tasks, 1)
+            all_tasks = all_tasks[::step][: args.num_tasks]
+        split = create_train_val_split if args.no_stratified else stratified_train_val_split
+        train_tasks, val_tasks = split(all_tasks, args.train_ratio)
+        return all_tasks, train_tasks, val_tasks, data_root() / "dev_databases"
+
+    all_tasks = load_bird_train(args.train_dir / "train_all.json", args.train_dir / "train_databases")
+    train_tasks, val_tasks = holdout_split(all_tasks, args.val_size, seed=args.split_seed, eligible=has_database)
+    train_tasks = [t for t in train_tasks if has_database(t)]
+    if args.task_ids:
+        keep = set(json.loads(args.task_ids.read_text()))
+        train_tasks = [t for t in train_tasks if t.question_id in keep]
+    if args.num_tasks and args.num_tasks < len(train_tasks):
+        step = len(train_tasks) // args.num_tasks
+        train_tasks = train_tasks[::step][: args.num_tasks]
+    return all_tasks, train_tasks, val_tasks, args.train_dir / "train_databases"
 
 
 def main() -> int:
@@ -72,29 +123,21 @@ def main() -> int:
         args.device = "cpu"
 
     try:
-        all_tasks = load_bird_dev(data_root=data_root())
+        all_tasks, train_tasks, val_tasks, db_root = load_tasks(args)
     except FileNotFoundError as e:
         logger.error("Failed to load BIRD: %s", e)
-        logger.error("Set VERDICT_DATA_ROOT to the folder holding dev.json and dev_databases/")
+        logger.error("Dev mode: set VERDICT_DATA_ROOT. Train mode: check --train-dir.")
         return 1
+    distribution = dict(Counter(t.difficulty for t in train_tasks))
+    logger.info("Loaded %d tasks; train %d %s, val %d", len(all_tasks), len(train_tasks), distribution, len(val_tasks))
 
-    if args.num_tasks:
-        # BIRD dev is sorted by database, so the first N would all be one or two
-        # databases. Take every k-th task instead to keep the variety.
-        step = max(len(all_tasks) // args.num_tasks, 1)
-        all_tasks = all_tasks[::step][: args.num_tasks]
-    distribution = dict(Counter(t.difficulty for t in all_tasks))
-    logger.info("Loaded %d tasks: %s", len(all_tasks), distribution)
-
-    split = create_train_val_split if args.no_stratified else stratified_train_val_split
-    train_tasks, val_tasks = split(all_tasks, args.train_ratio)
-    logger.info("Train: %d tasks, val: %d tasks", len(train_tasks), len(val_tasks))
-
+    use_lora = args.lora_r > 0 or args.init_adapter is not None
+    lr = args.lr if args.lr is not None else (LORA_LR if use_lora else DEFAULTS.learning_rate)
     config = GRPOTrainingConfig(
         model_name=args.model,
         num_epochs=args.epochs,
         batch_size=args.batch_size,
-        learning_rate=args.lr,
+        learning_rate=lr,
         num_generations=args.num_generations,
         max_tokens=args.max_tokens,
         temperature=args.temperature,
@@ -104,8 +147,12 @@ def main() -> int:
         seed=args.seed,
         checkpoint_dir=Path(args.checkpoint_dir),
         device=args.device,
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        init_adapter=args.init_adapter,
+        schemas_file=args.train_dir / "schemas.json" if args.train_dir else None,
     )
-    trainer = GRPOTrainer(config=config, db_root=data_root() / "dev_databases")
+    trainer = GRPOTrainer(config=config, db_root=db_root)
 
     start = time.time()
     result = trainer.fit(train_tasks, val_tasks)
@@ -117,7 +164,8 @@ def main() -> int:
     results_path.write_text(
         json.dumps(
             {
-                "config": vars(args),
+                "config": {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
+                "learning_rate": lr,
                 "data": {
                     "total_tasks": len(all_tasks),
                     "train_tasks": len(train_tasks),
