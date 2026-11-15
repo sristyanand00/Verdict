@@ -1,9 +1,19 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from tests.fixtures import make_tiny_db
 from verdict.data.loaders import BirdTask
-from verdict.train.data_prep import build_prompt, load_examples, prepare_training_data, save_examples
+from verdict.train.data_prep import (
+    SchemaStore,
+    build_prompt,
+    load_examples,
+    prepare_training_data,
+    save_examples,
+    shorten_schema,
+    sql_answer,
+)
 
 
 def task(db_id="tiny", evidence="year means school year"):
@@ -44,3 +54,30 @@ def test_prepare_skips_missing_databases_and_round_trips(tmp_path):
     [row] = load_examples(out)
     assert row["gold_sql"] == task().gold_sql
     assert row["prompt"] == json.loads(json.dumps(examples[0].prompt))
+
+
+def test_schema_store_prefers_the_database_and_falls_back_to_the_saved_file(tmp_path):
+    make_tiny_db(tmp_path / "dbs")
+    saved = tmp_path / "schemas.json"
+    saved.write_text(json.dumps({
+        "tiny": {"with_rows": "SAVED", "no_rows": "SAVED"},
+        "big": {"with_rows": "CREATE TABLE big (x);\n-- Sample rows:\n-- (1,)", "no_rows": "CREATE TABLE big (x);"},
+    }))
+    store = SchemaStore(tmp_path / "dbs", saved, sample_rows=2, max_chars=6000)
+    assert "CREATE TABLE students" in store("tiny")  # read from the database, not "SAVED"
+    assert "-- (1,)" in store("big")
+    assert SchemaStore(None, saved, sample_rows=0)("big") == "CREATE TABLE big (x);"
+    with pytest.raises(FileNotFoundError):
+        store("nowhere")
+
+
+def test_shorten_schema_drops_rows_first_then_cuts():
+    with_rows = "CREATE TABLE a (x);\n-- Sample rows:\n-- (1,)\n"
+    assert shorten_schema(with_rows, "CREATE TABLE a (x);", 1000) == with_rows
+    assert shorten_schema(with_rows, "CREATE TABLE a (x);", 25) == "CREATE TABLE a (x);"
+    long = "line one\nline two\nline three"
+    assert shorten_schema(long, long, 15) == "line one\n-- (schema truncated)"
+
+
+def test_sql_answer_is_one_fenced_block():
+    assert sql_answer("  SELECT 1 \n") == "```sql\nSELECT 1\n```"

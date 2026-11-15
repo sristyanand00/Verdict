@@ -48,8 +48,16 @@ def execute_query(
         cur = con.cursor()
         cur.execute(sql)
 
-        # cur.description is None for statements that return no result set.
-        columns = tuple(d[0] for d in cur.description) if cur.description else ()
+        # cur.description is None when nothing produced a result set: an empty
+        # string, only a comment, only ";". SQLite runs these without error.
+        # They are not answers, and counting them as "ran" would pay the
+        # "ran but wrong" reward for writing nothing. A SELECT always has a
+        # description, even when it returns zero rows.
+        if cur.description is None:
+            return ExecutionResult(
+                status="error", error="no result set: the query is empty or not a SELECT", elapsed_ms=ms()
+            )
+        columns = tuple(d[0] for d in cur.description)
         rows = tuple(cur.fetchmany(MAX_ROWS))
         truncated = len(rows) == MAX_ROWS and cur.fetchone() is not None
 

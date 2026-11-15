@@ -1,3 +1,5 @@
+import pytest
+
 from tests.fixtures import make_tiny_db
 from verdict.verifier.execute import execute_query
 from verdict.verifier.pool import execute_isolated
@@ -21,6 +23,16 @@ def test_bad_sql_returns_error_not_exception(tmp_path):
     r = execute_query("SELECT * FROM no_such_table", db)
     assert r.status == "error"
     assert "no such table" in r.error.lower()
+
+
+@pytest.mark.parametrize("sql", ["", "   ", "-- just a comment", ";", "/* nothing */"])
+def test_a_query_with_no_result_set_is_an_error(tmp_path, sql):
+    """SQLite runs these without complaint. They are not answers, and must
+    not earn the 'ran but wrong' training reward."""
+    db = make_tiny_db(tmp_path)
+    r = execute_query(sql, db)
+    assert r.status == "error"
+    assert "no result set" in r.error
 
 
 def test_empty_result_is_still_ok(tmp_path):
