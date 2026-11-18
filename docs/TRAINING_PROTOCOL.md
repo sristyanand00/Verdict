@@ -340,10 +340,13 @@ measurements instead of the placeholders.
 
 | | Base model | SFT | SFT + GRPO |
 |---|---|---|---|
-| BIRD dev execution accuracy | | | |
-| Share of queries that run | | | |
+| BIRD dev execution accuracy | 20.7% | 34.9% | |
+| Share of queries that run | 42.6% | 67.9% | |
 | Green precision / coverage | | | |
 | Unanswerable recall | | | |
+
+Base model: Qwen2.5-Coder-1.5B-Instruct. Accuracies use a 5-second query
+limit; see Section 9.7.
 
 ---
 
@@ -472,6 +475,73 @@ wrong" answers may have been empty; how many was not measured.
 - Watch the share of queries that run against the share that are correct.
   If the first rises and the second does not, lower or remove the 0.1
   reward.
+
+### 9.6 Supervised fine-tuning (Phase 2, step 12)
+
+Qwen2.5-Coder-1.5B-Instruct with LoRA (r 16, alpha 32, dropout 0.05;
+18.5M trainable parameters, 1.18% of 1.56B). 9,226 BIRD train examples
+(two skipped for answers over 256 tokens), 1 epoch, 577 steps of 16
+examples, learning rate 1e-4 with 20 warm-up steps and linear decay. About
+20 s per step on a T4; 217.8 minutes including two validation passes.
+
+Training loss per answer token fell from 0.25 (first 10 steps) to 0.13 to
+0.16 (last 100 steps).
+
+On the 200 held-out BIRD train questions (greedy, 5-second query limit):
+
+| | Before SFT | After SFT |
+|---|---|---|
+| Correct | 20.5% (41) | 38.0% (76) |
+| Ran | 37.0% | 61.5% |
+| Failed: unknown column | 80 | 38 |
+| Failed: timeout | 28 | 33 |
+| Failed: syntax error | 10 | 0 |
+
+The base model's failures were mostly invented or misplaced column names,
+not output formatting, as had been assumed before the failure reasons were
+recorded.
+
+### 9.7 BIRD dev, base and SFT models (Phase 2, step 15, first part)
+
+All 1,534 BIRD dev questions, one greedy answer each, 5-second query limit,
+8 queries scored in parallel. Neither model was trained on any BIRD dev
+question.
+
+| | Base | SFT |
+|---|---|---|
+| Overall correct | 318 (20.7%) | 535 (34.9%) |
+| simple (925) | 26.3% | 40.8% |
+| moderate (464) | 12.3% | 26.1% |
+| challenging (145) | 12.4% | 25.5% |
+| Ran | 42.6% | 67.9% |
+
+Per question, base to SFT: 285 became correct, 68 stopped being correct,
+net +217.
+
+| Failure reason | Base | SFT |
+|---|---|---|
+| unknown column | 644 | 265 |
+| timeout | 159 | 210 |
+| unknown function | 30 | 3 |
+| syntax error | 26 | 8 |
+| other error | 13 | 0 |
+| unknown table | 5 | 6 |
+
+Answers marked wrong because the gold query itself failed: 18 (base), 10
+(SFT).
+
+**Open questions.**
+
+- **Timeouts.** 210 SFT answers (14%) hit the 5-second limit, more than the
+  base model's 159, because more SFT answers reach execution. Some of these
+  may be correct queries on large databases, slowed further by running 8 at
+  once on a few CPU cores. The saved SQL will be re-scored with a longer
+  limit before these numbers are reported.
+- **Unknown columns.** Still the largest failure. Schemas over 6,000
+  characters are shortened, first by dropping sample rows, then by cutting.
+  Whether cut schemas account for part of these failures is to be checked.
+- **Generation time.** Answering took 3,712 s for the base model and 6,044 s
+  for the SFT model. The cause has not been checked.
 
 ---
 

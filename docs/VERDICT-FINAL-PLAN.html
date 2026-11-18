@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verdict: Final Plan and Build Guide</title><style>
+:root{--bg:#fbfaf7;--ink:#1d1d1b;--muted:#6b6a65;--line:#e4e1d8;--accent:#1f5f4a;--code:#f2efe7;--side:#f4f2ec}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.65 -apple-system,"Segoe UI",Inter,Roboto,sans-serif;color:var(--ink);background:var(--bg)}
+nav{position:fixed;top:0;left:0;bottom:0;width:280px;overflow-y:auto;background:var(--side);border-right:1px solid var(--line);padding:28px 20px}
+nav .brand{font-weight:700;font-size:18px;letter-spacing:.02em;margin-bottom:4px}
+nav .tag{color:var(--muted);font-size:13px;margin-bottom:20px}
+nav ul{list-style:none;padding-left:0;margin:0}
+nav ul ul{padding-left:14px}
+nav a{display:block;color:var(--ink);text-decoration:none;font-size:14px;padding:4px 8px;border-radius:6px}
+nav a:hover{background:#e9e6dc}
+main{margin-left:280px;max-width:980px;padding:40px 56px 120px}
+h1{font-size:34px;line-height:1.2;margin:0 0 6px}
+h2{font-size:24px;margin:56px 0 12px;padding-top:12px;border-top:1px solid var(--line)}
+h3{font-size:18px;margin:30px 0 8px}
+h4{font-size:16px;margin:22px 0 6px}
+a{color:var(--accent)}
+code{font-family:"JetBrains Mono",Consolas,monospace;font-size:13.5px;background:var(--code);padding:1px 5px;border-radius:4px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;line-height:1.4}
+pre code{background:none;padding:0;font-size:12.8px}
+table{border-collapse:collapse;width:100%;margin:12px 0 18px;font-size:14.5px}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:#efece4}
+blockquote{margin:14px 0;padding:10px 16px;border-left:4px solid var(--accent);background:#eef4f1;border-radius:0 8px 8px 0}
+hr{border:none;border-top:1px solid var(--line);margin:28px 0}
+@media (max-width:900px){nav{position:static;width:auto;border-right:none;border-bottom:1px solid var(--line)}main{margin-left:0;padding:24px}}
+@media print{nav{display:none}main{margin-left:0}}
+</style></head>
+<body><nav><div class="brand">VERDICT</div><div class="tag">Final plan and build guide</div><div class="toc">
+<ul>
+<li><a href="#verdict-final-plan-and-build-guide">Verdict: Final Plan and Build Guide</a><ul>
+<li><a href="#contents">Contents</a></li>
+<li><a href="#1-verdict-in-one-page">1. Verdict in one page</a></li>
+<li><a href="#2-how-we-got-here-decisions-made">2. How we got here: decisions made</a></li>
+<li><a href="#3-what-already-exists-in-the-code">3. What already exists in the code</a></li>
+<li><a href="#4-the-product-flows-and-features">4. The product flows and features</a></li>
+<li><a href="#5-features-outside-the-flows">5. Features outside the flows</a></li>
+<li><a href="#6-screens-structure-of-every-page">6. Screens: structure of every page</a></li>
+<li><a href="#7-backend">7. Backend</a></li>
+<li><a href="#8-api-contract">8. API contract</a></li>
+<li><a href="#9-connections-how-everything-talks">9. Connections: how everything talks</a></li>
+<li><a href="#10-databases-we-bring">10. Databases we bring</a></li>
+<li><a href="#11-models-qwen-and-gemini">11. Models: Qwen and Gemini</a></li>
+<li><a href="#12-proof-what-we-measure-and-how">12. Proof: what we measure and how</a></li>
+<li><a href="#13-the-20-day-plan">13. The 20-day plan</a></li>
+<li><a href="#14-demo-day-script">14. Demo day script</a></li>
+<li><a href="#15-judge-questions-and-answers">15. Judge questions and answers</a></li>
+<li><a href="#16-risks-and-backups">16. Risks and backups</a></li>
+<li><a href="#17-what-we-are-not-building">17. What we are not building</a></li>
+<li><a href="#18-build-guide-how-to-work-through-this">18. Build guide: how to work through this</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav>
+<main><h1 id="verdict-final-plan-and-build-guide">Verdict: Final Plan and Build Guide</h1>
+<p>The AI analyst that knows when not to answer.</p>
+<p>Version 1.0, written 18 Nov 2026. Build window: 19 Nov to 8 Dec 2026 (20 days). Buffer: 9 Dec to demo day (about 18 Dec).</p>
+<p>This one file holds everything decided so far: what Verdict is, what already exists in the code, every feature and flow, every screen, the backend, the API, how the parts connect, how we prove it works, the 20-day plan, and the demo day script.</p>
+<hr />
+
+<hr />
+<h2 id="1-verdict-in-one-page">1. Verdict in one page</h2>
+<h3 id="the-problem">The problem</h3>
+<p>Companies now let AI answer questions about their data. The AI sometimes gives a wrong answer while sounding completely sure. Nobody can tell which answers are wrong, so an analyst has to re-check every one. Checking takes almost as long as writing the query, so AI has not really reduced the analyst's work.</p>
+<p>A second problem: many companies (banks, hospitals, a lot of Indian firms) are not allowed to send their data to a cloud AI at all. They get no AI help.</p>
+<h3 id="what-verdict-does">What Verdict does</h3>
+<p>A manager asks a question in plain English. Verdict writes the SQL several times, runs it safely, checks the answers, and decides:</p>
+<ul>
+<li><strong>Green</strong>: trusted. The manager gets the answer directly, with a receipt showing why.</li>
+<li><strong>Did you mean?</strong>: the question has two meanings. Verdict asks which one.</li>
+<li><strong>Can't answer</strong>: the data does not contain this. Verdict says what is missing.</li>
+<li><strong>Yellow / Red</strong>: not sure, or probably wrong. It goes to the analyst's inbox with a draft.</li>
+</ul>
+<p>The analyst only handles the exceptions. Every approval teaches Verdict, so more questions turn green over time.</p>
+<p>Verdict can run fully private with our own trained Qwen model, on the company's own machine, with no internet.</p>
+<h3 id="one-line-pitch">One-line pitch</h3>
+<blockquote>
+<p>"Everyone is building AI analysts. We built the one that knows when it is wrong, and it can run privately on a model we trained ourselves."</p>
+</blockquote>
+<h3 id="the-three-layers-how-to-describe-it-to-recruiters">The three layers (how to describe it to recruiters)</h3>
+<ul>
+<li><strong>Product</strong>: an AI teammate for analysts that handles routine questions and routes the rest.</li>
+<li><strong>Research</strong>: can a verifier reliably tell which text-to-SQL answers are safe to show without a human?</li>
+<li><strong>Engineering</strong>: a complete, safe, private pipeline around a small open model we trained with execution-based rewards.</li>
+</ul>
+<hr />
+<h2 id="2-how-we-got-here-decisions-made">2. How we got here: decisions made</h2>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Not "replace the analyst"</td>
+<td>AI agents still score low on multi-step analyst work. The honest claim is: take the repetitive part off the analyst.</td>
+</tr>
+<tr>
+<td>Not a small Databricks / Snowflake</td>
+<td>They are huge platforms. Verdict owns one narrow thing: trust and routing of AI answers.</td>
+</tr>
+<tr>
+<td>The analyst inbox is the product</td>
+<td>The analyst's load drops because they only see yellow/red questions.</td>
+</tr>
+<tr>
+<td>Qwen is the main engine (private mode)</td>
+<td>It gives the training a real purpose: private, offline, cheap.</td>
+</tr>
+<tr>
+<td>Gemini is optional</td>
+<td>Decided on day 6 from Qwen's numbers. Used as cloud mode and as a comparison.</td>
+</tr>
+<tr>
+<td>Learning loop never skips checks</td>
+<td>"Similar question, so green" is unsafe ("this quarter" vs "last quarter"). Approvals improve the prompt; checks still decide the color.</td>
+</tr>
+<tr>
+<td>No fake confidence numbers</td>
+<td>The UI shows tested accuracy with a range, not "97%" per answer.</td>
+</tr>
+<tr>
+<td>Only real checks on the receipt</td>
+<td>Perturbation is a stub, so it is never shown.</td>
+</tr>
+<tr>
+<td>Olist for the live demo, BIRD for official numbers</td>
+<td>Olist is real, messy company data the model has never seen. BIRD is the standard benchmark.</td>
+</tr>
+<tr>
+<td>Bring 3 to 4 tested databases</td>
+<td>Switching databases live shows realness, but only tested ones.</td>
+</tr>
+<tr>
+<td>9 core pieces, not 28</td>
+<td>Everything else is "later" or "never".</td>
+</tr>
+</tbody>
+</table>
+<p>Items from the earlier option list and where they ended up:</p>
+<ul>
+<li><strong>Core</strong>: A1 Workbench (as Ask + Receipt), A5 Review queue (as Analyst Inbox), A9 Trust Report, A10 model comparison (as Model Arena), B2 Ambiguity detector, B3 Confident-wrong checks, B5 Known numbers (light), B8 Private mode, C1/C2 training evaluation, C5 confidence benchmark, C6 unanswerable.</li>
+<li><strong>Stretch</strong>: C3 shuffled-reward control, C7 hand audit of 100 to 200 BIRD gold queries.</li>
+<li><strong>Later</strong>: B1 Shadow mode, A4 Postgres, B10 expensive-query blocking, B11 audit pack.</li>
+<li><strong>Dropped</strong>: A2, A3, A6, A7, A8, B4, B6 (as a separate feature), B7, B9, C4.</li>
+</ul>
+<hr />
+<h2 id="3-what-already-exists-in-the-code">3. What already exists in the code</h2>
+<h3 id="verifier-verdictverifier-the-strongest-part">Verifier (<code>verdict/verifier/</code>), the strongest part</h3>
+<ul>
+<li><code>safety.py</code>: read-only connection (<code>mode=ro</code>), SQLite authorizer, keyword pre-filter, time deadline.</li>
+<li><code>execute.py</code>: fast in-process run (used in training), max 10,000 rows.</li>
+<li><code>pool.py</code>: runs a query in a separate process that is killed on timeout (used by the product).</li>
+<li><code>compare.py</code>: result comparison. Row order counts only with ORDER BY, 94 equals 94.0, NULL is different from 0 and from empty, duplicates counted.</li>
+<li><code>types.py</code>: results are values, never exceptions. Statuses: ok, blocked, timeout, error, crashed.</li>
+</ul>
+<h3 id="trust-engine-verdictengine">Trust engine (<code>verdict/engine/</code>)</h3>
+<ul>
+<li><code>ingest.py</code>: upload CSV, Excel (one table per sheet) or SQLite. Cleans column names and keeps a map back to the original names.</li>
+<li><code>schema.py</code>: describes tables and columns to the AI. Names and types only, no rows (privacy).</li>
+<li><code>generate.py</code>: builds the prompt, asks for n attempts, allows <code>CANNOT_ANSWER</code>.</li>
+<li><code>llm.py</code>: <code>SQLWriter</code> interface, <code>GeminiWriter</code> (with disk cache), <code>FixedWriter</code> for tests.</li>
+<li><code>group.py</code>: runs every attempt in an isolated process and groups attempts with equal results.</li>
+<li><code>trust.py</code>: decides green / yellow / red / unanswerable from agreement. Empty answers are never green.</li>
+<li><code>ask.py</code>: one function that runs the whole pipeline.</li>
+<li><code>thresholds.json</code>: <strong>placeholder values</strong> (green 0.75, yellow 0.5). Not measured yet.</li>
+</ul>
+<h3 id="evaluation-verdicteval">Evaluation (<code>verdict/eval/</code>)</h3>
+<ul>
+<li><code>harness.py</code>: runs the engine on BIRD questions, also runs the gold SQL, saves raw records to JSONL. Can resume.</li>
+<li><code>calibration.py</code>: agreement table, picks thresholds on one half of the questions, reports on the other half.</li>
+<li><code>metrics.py</code>: Wilson 95% confidence range.</li>
+<li><code>export.py</code>, <code>passk.py</code>, <code>taxonomy.py</code>: <strong>stubs</strong>.</li>
+</ul>
+<h3 id="training-verdicttrain">Training (<code>verdict/train/</code>)</h3>
+<ul>
+<li><code>sft.py</code>: supervised fine-tuning on BIRD train.</li>
+<li><code>grpo.py</code>, <code>grpo_utils.py</code>: GRPO loop (Dr. GRPO style advantage, fp32 weights, fp16 autocast).</li>
+<li><code>reward.py</code>: execution reward, 4 schemes (sparse default, smooth, penalty, normalized).</li>
+<li><code>modeling.py</code>: LoRA setup, load for inference.</li>
+<li><code>rollout.py</code>, <code>batch.py</code>, <code>data_prep.py</code>, <code>evaluation.py</code>, <code>monitor.py</code>.</li>
+<li><code>control/gsm8k.py</code>: <strong>stub</strong>.</li>
+<li><strong>Status</strong>: Qwen2.5-Coder-1.5B is being trained now on the college GPUs. No trained-model results are in <code>results/</code> yet.</li>
+</ul>
+<h3 id="data-and-audit">Data and audit</h3>
+<ul>
+<li><code>data/loaders.py</code>: BIRD dev and train loaders.</li>
+<li><code>data/unanswerable.py</code>: makes unanswerable questions by dropping the tables the gold SQL needs.</li>
+<li><code>data/schema.py</code>: schema with sample rows (for training only).</li>
+<li><code>audit/audit.py</code>, <code>audit/taxonomy.py</code>: runs every BIRD gold query. Result: 1,531 of 1,534 run (99.8%). This means "runs", not "is correct".</li>
+<li><code>data/perturb.py</code>, <code>data/filtering.py</code>: <strong>stubs</strong>.</li>
+</ul>
+<h3 id="scripts">Scripts</h3>
+<p><code>ask.py</code>, <code>trace_ask.py</code>, <code>check_question.py</code>, <code>play_verifier.py</code>, <code>review_cases.py</code>, <code>run_audit.py</code>, <code>run_calibration.py</code>, <code>evaluate.py</code>, <code>pass_rate.py</code>, <code>train_sft.py</code>, <code>train_grpo.py</code>, <code>train_qwen.py</code>, <code>test_training.py</code>, <code>watch_changes.py</code>.</p>
+<h3 id="tests">Tests</h3>
+<p>About 134 test functions across 24 test files, run in CI (<code>.github/workflows/ci.yml</code>).</p>
+<h3 id="frontend-and-api">Frontend and API</h3>
+<ul>
+<li><code>verdict/api/main.py</code>: one line. <strong>Empty.</strong></li>
+<li><code>frontend/src/screens/*.tsx</code>: comments only (Landing, Console, TrustDial, Audit, Hacking, Dashboard, History). <strong>Empty.</strong> No <code>package.json</code> yet.</li>
+</ul>
+<h3 id="current-numbers-honest">Current numbers (honest)</h3>
+<p>From a small pilot run (34 BIRD questions, Gemini Flash-Lite, 13 Nov 2026):</p>
+<ul>
+<li>When all 8 attempts agreed, the answer was right only <strong>14 of 26 times (54%, range 35% to 71%)</strong>.</li>
+<li>One plain AI answer was right 8 of 17 times on the test half.</li>
+</ul>
+<p>The sample is tiny, so these are not results. They do show the key point: <strong>agreement alone is not enough</strong>. That is why Verdict needs extra checks (known numbers, ambiguity split, a second model) and properly measured thresholds.</p>
+<hr />
+<h2 id="4-the-product-flows-and-features">4. The product flows and features</h2>
+<pre><code>                         MANAGER
+                    &quot;Sales in Pune last month?&quot;
+                            |
+                            v
+   +--------------------------------------------------------+
+   |                       VERDICT                          |
+   |  schema -&gt; 8 SQL attempts -&gt; safe run -&gt; group results |
+   |        -&gt; checks -&gt; decide the color                   |
+   +--------------------------------------------------------+
+        |            |              |               |
+      GREEN     DID YOU MEAN?   CAN'T ANSWER   YELLOW / RED
+        |            |              |               |
+     Manager    Manager picks   Manager told     ANALYST INBOX
+     gets it    A or B          what's missing      |
+                                              approve / fix / reject
+                                                    |
+                                              KNOWLEDGE STORE
+                                       (meanings + approved examples
+                                            + known numbers)
+                                                    |
+                                       used on future questions
+                                       (checks still decide color)
+</code></pre>
+<h3 id="flow-1-set-up-the-data">Flow 1: Set up the data</h3>
+<ol>
+<li>Analyst opens the <strong>Data page</strong>.</li>
+<li>Picks a preloaded database (Olist, BIRD financial, BIRD debit card, AdventureWorks if ready) or uploads CSV / Excel / SQLite.</li>
+<li>Verdict scans tables and columns and shows them.</li>
+<li>Analyst picks the model: Private (Qwen) or Cloud (Gemini, if enabled).</li>
+<li>Verdict is ready.</li>
+</ol>
+<p>Features: database switcher, upload, schema view, model switch, schema selection for big databases (stretch, only for AdventureWorks).</p>
+<h3 id="flow-2-manager-asks-a-question-the-main-flow">Flow 2: Manager asks a question (the main flow)</h3>
+<ol>
+<li>Manager types a question on the <strong>Ask page</strong>.</li>
+<li>Verdict builds the prompt: schema + saved meanings + similar approved examples.</li>
+<li>The model writes 8 SQL attempts.</li>
+<li>The verifier runs each one safely in a separate process.</li>
+<li>Attempts are grouped by result.</li>
+<li>Checks run (see the list below).</li>
+<li>Verdict decides the outcome:</li>
+<li><strong>Green</strong>: answer shown to the manager, with "View receipt".</li>
+<li><strong>Did you mean?</strong>: two big groups with different answers. Manager picks one, and that answer is shown (still marked with its level).</li>
+<li><strong>Can't answer</strong>: most attempts said <code>CANNOT_ANSWER</code>. Shown with what seems to be missing.</li>
+<li><strong>Yellow</strong>: manager sees "An analyst is checking this", and it goes to the inbox.</li>
+<li><strong>Red</strong>: same, marked as likely wrong.</li>
+<li>Every ask is saved (question, attempts, groups, checks, decision).</li>
+</ol>
+<p><strong>The checks (only real ones):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>What it means</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Safe</td>
+<td>Read-only, nothing blocked</td>
+<td>exists</td>
+</tr>
+<tr>
+<td>Ran</td>
+<td>The SQL ran without error or timeout</td>
+<td>exists</td>
+</tr>
+<tr>
+<td>Agreement</td>
+<td>How many of 8 attempts give the same answer</td>
+<td>exists</td>
+</tr>
+<tr>
+<td>Not empty</td>
+<td>Answer is not empty or all NULL</td>
+<td>exists</td>
+</tr>
+<tr>
+<td>No split</td>
+<td>Attempts did not split into two big groups</td>
+<td>to build</td>
+</tr>
+<tr>
+<td>Matches known numbers</td>
+<td>Does not contradict an approved answer to a near-identical question</td>
+<td>to build</td>
+</tr>
+<tr>
+<td>Second model agrees</td>
+<td>Gemini's answer matches (only if Gemini enabled)</td>
+<td>to build, optional</td>
+</tr>
+</tbody>
+</table>
+<h3 id="flow-3-the-analyst-works-the-inbox">Flow 3: The analyst works the inbox</h3>
+<ol>
+<li><strong>Analyst Inbox</strong> lists yellow and red questions, each with its reason. Filters: level, database, date.</li>
+<li>Analyst opens one on the <strong>Inbox detail page</strong>: question, draft SQL, result, the attempt groups.</li>
+<li>Analyst can edit the SQL and run it again (same safe verifier).</li>
+<li>Analyst chooses:</li>
+<li><strong>Approve</strong>: the draft is right. Sent to the manager.</li>
+<li><strong>Fix</strong>: edited SQL is right. Sent to the manager.</li>
+<li><strong>Reject</strong>: cannot be answered. Manager is told why.</li>
+<li>Optional: <strong>Save a meaning</strong> ("revenue = SUM(price), excluding cancelled orders").</li>
+<li>Approved and fixed answers are saved as <strong>approved examples</strong> and, if the analyst ticks it, as <strong>known numbers</strong>.</li>
+</ol>
+<h3 id="flow-4-the-learning-loop">Flow 4: The learning loop</h3>
+<ol>
+<li>Saved meanings and approved examples appear on the <strong>Knowledge page</strong>.</li>
+<li>When a new question comes in, Verdict finds the most similar approved examples (text similarity) and adds them, plus matching meanings, to the prompt.</li>
+<li>The new answer still goes through every check. It is green only if the checks pass.</li>
+<li>Extra check: if the new question is near-identical to an approved one and the answer differs, it becomes yellow with the reason "differs from an approved answer".</li>
+<li>Demo moment: first question goes yellow and the analyst fixes it. A similar question afterwards comes back green.</li>
+</ol>
+<h3 id="flow-5-private-mode">Flow 5: Private mode</h3>
+<ol>
+<li>Model switch set to Private.</li>
+<li>Qwen runs on the laptop (Ollama with a GGUF file), with the wifi off.</li>
+<li>Same checks, same colors.</li>
+</ol>
+<h3 id="flow-6-model-arena-demo-flow">Flow 6: Model Arena (demo flow)</h3>
+<ol>
+<li>Open the <strong>Model Arena</strong>.</li>
+<li>Pick a scripted question (or type one).</li>
+<li>All 4 machines answer (cached answers for speed and safety).</li>
+<li>The verifier stamps each one correct or wrong. Verdict shows its color.</li>
+<li>Below: the scoreboard from the full evaluation.</li>
+</ol>
+<hr />
+<h2 id="5-features-outside-the-flows">5. Features outside the flows</h2>
+<h3 id="proof-pages-shown-on-demo-day-not-used-in-daily-work">Proof pages (shown on demo day, not used in daily work)</h3>
+<ul>
+<li><strong>Model Arena</strong>: Qwen base, Qwen SFT, Qwen SFT+GRPO, Gemini, side by side.</li>
+<li><strong>Trust Dashboard</strong>: green precision with range, coverage, share of questions that needed no human, baselines, unanswerable results, per-database results.</li>
+</ul>
+<h3 id="engine-work-behind-the-scenes">Engine work (behind the scenes)</h3>
+<ul>
+<li>Calibrated thresholds (replace the placeholder <code>thresholds.json</code>).</li>
+<li>Full evaluation of all models on 1,534 BIRD dev questions.</li>
+<li>Baselines: single answer, majority vote, refuse everything.</li>
+<li>Hand check of 50 "split" cases (is it really ambiguity?).</li>
+<li>100 held-out Olist questions written by classmates.</li>
+<li>20 test questions per demo database.</li>
+<li>FastAPI backend.</li>
+<li>New writer that talks to any OpenAI-compatible server (vLLM on the college GPU, Ollama on the laptop).</li>
+<li>Packaging Qwen for the laptop (merge LoRA, GGUF, Ollama).</li>
+<li><code>results.json</code> export so the proof pages work offline.</li>
+<li>Cached demo answers and a recorded backup video.</li>
+<li>Safety test: hostile queries all blocked, database file hash unchanged after a run.</li>
+<li>Every ask saved as a record (doubles as an audit trail).</li>
+</ul>
+<h3 id="stretch-only-if-ahead-of-schedule">Stretch (only if ahead of schedule)</h3>
+<ul>
+<li>Shuffled-reward control run (C3).</li>
+<li>Hand audit of 100 to 200 BIRD gold queries (C7).</li>
+<li>Schema selection for big databases (AdventureWorks).</li>
+</ul>
+<hr />
+<h2 id="6-screens-structure-of-every-page">6. Screens: structure of every page</h2>
+<p>You do the visual design. This section fixes what each screen must contain and what data it gets. Design rule for colors: never rely on color alone. Every badge also has a text label (Green / Yellow / Red / Can't answer / Did you mean?).</p>
+<h3 id="global-layout">Global layout</h3>
+<pre><code>+------------------------------------------------------------------+
+| VERDICT   [Ask] [Inbox (7)] [Knowledge] [Data] [Trust] [Arena]   |
+|                         DB: Olist v    Model: Private (Qwen) v   |
++------------------------------------------------------------------+
+|                                                                  |
+|                         page content                             |
+|                                                                  |
++------------------------------------------------------------------+
+</code></pre>
+<ul>
+<li>Top bar: logo, page links, inbox count, current database, current model.</li>
+<li>A "role" toggle (Manager / Analyst) is optional. For the demo, simply hide Inbox and Knowledge in Manager view.</li>
+</ul>
+<h3 id="screen-1-ask-manager">Screen 1: Ask (manager)</h3>
+<pre><code>+------------------------------------------------------------------+
+|  Ask your data anything                                          |
+|  [ What were sales in Sao Paulo last month?            ] [Ask]   |
+|  Try: &quot;orders delivered late in 2018&quot;  &quot;top 5 categories&quot;        |
++------------------------------------------------------------------+
+|  [GREEN]  Trusted answer                                         |
+|  Sales in Sao Paulo, Aug 2018: R$ 1,284,330                      |
+|  +---------------------------+                                   |
+|  | total_sales               |   small result table              |
+|  | 1284330.12                |                                   |
+|  +---------------------------+                                   |
+|  Green answers were right 91% of the time in testing (88-94%).   |
+|  [View receipt]                                     3.2 s, Qwen  |
++------------------------------------------------------------------+
+|  Recent questions (list, each with its badge)                    |
++------------------------------------------------------------------+
+</code></pre>
+<p>States of the answer card:</p>
+<ul>
+<li><strong>Loading</strong>: "Writing 8 attempts... Running safely... Checking..." (step by step, real progress).</li>
+<li><strong>Green</strong>: answer line, table, tested trust line, receipt button.</li>
+<li><strong>Did you mean?</strong>: see Screen 3.</li>
+<li><strong>Can't answer</strong>: see Screen 4.</li>
+<li><strong>Yellow / Red</strong>: "Not sure enough to answer. Sent to an analyst." Shows the reason. Optional "Show the draft anyway" (marked clearly as unverified).</li>
+<li><strong>Error</strong>: model or server unavailable.</li>
+</ul>
+<p>Data needed: <code>POST /api/ask</code> response.</p>
+<h3 id="screen-2-receipt">Screen 2: Receipt</h3>
+<pre><code>+------------------------------------------------------------------+
+|  RECEIPT                                              [GREEN]    |
+|  Question: What were sales in Sao Paulo last month?              |
++------------------------------------------------------------------+
+|  SQL used                                                        |
+|  SELECT SUM(p.payment_value) FROM orders o JOIN ...              |
++------------------------------------------------------------------+
+|  Result                    (table)                               |
++------------------------------------------------------------------+
+|  8 attempts                                                      |
+|  (o)(o)(o)(o)(o)(o)(o)  (x)                                      |
+|   group A: 7 attempts = 1,284,330      group B: 1 = 1,301,882    |
++------------------------------------------------------------------+
+|  Checks                                                          |
+|  [pass] Safe: read-only, nothing blocked                         |
+|  [pass] Ran: 8 of 8 ran                                          |
+|  [pass] Agreement: 7 of 8 give the same answer                   |
+|  [pass] Not empty                                                |
+|  [pass] No split into two meanings                               |
+|  [pass] No conflict with approved answers                        |
+|  [ -- ] Second model: off                                        |
++------------------------------------------------------------------+
+|  Used knowledge: &quot;sales = payment_value, delivered orders only&quot;  |
+|  Model: Qwen 1.5B (trained), private.  Time: 3.2 s               |
+|  Tested trust: green right 91% (88-94%) on 1,534 BIRD questions  |
++------------------------------------------------------------------+
+</code></pre>
+<p>Data needed: <code>GET /api/asks/{id}</code>.</p>
+<h3 id="screen-3-did-you-mean">Screen 3: Did you mean?</h3>
+<pre><code>+------------------------------------------------------------------+
+|  [DID YOU MEAN?]  &quot;What was our revenue in 2017?&quot;                |
+|  This question can mean two things:                              |
+|                                                                  |
+|  ( A ) Product price only            R$ 6,155,806   (4 attempts) |
+|  ( B ) Price plus freight            R$ 7,142,672   (4 attempts) |
+|                                                                  |
+|  [Use A]   [Use B]   [Send to analyst]                           |
++------------------------------------------------------------------+
+</code></pre>
+<ul>
+<li>Each option shows a short plain-language description of what that SQL does, the number it gives, and how many attempts chose it.</li>
+<li>Picking one shows that answer. It can be saved as a meaning (analyst only).</li>
+</ul>
+<h3 id="screen-4-cant-answer">Screen 4: Can't answer</h3>
+<pre><code>+------------------------------------------------------------------+
+|  [CAN'T ANSWER]  &quot;What was our advertising ROI in 2018?&quot;         |
+|  Your data does not contain advertising spend.                   |
+|  Tables available: orders, payments, items, products, ...        |
+|  7 of 8 attempts said this cannot be answered.                   |
+|  [Ask something else]   [Send to analyst]                        |
++------------------------------------------------------------------+
+</code></pre>
+<h3 id="screen-5-analyst-inbox">Screen 5: Analyst Inbox</h3>
+<pre><code>+------------------------------------------------------------------+
+|  ANALYST INBOX            Red 3   Yellow 4        Filter: [All v]|
++------------------------------------------------------------------+
+|  [RED]    How many customers churned last year?       2 min ago  |
+|           Reason: attempts split 3 / 3 / 2, no clear answer      |
+|  [YELLOW] Revenue from Rio last quarter?              5 min ago  |
+|           Reason: 5 of 8 agree (below green level)               |
+|  [YELLOW] Average delivery time for electronics?     11 min ago  |
+|           Reason: differs from an approved answer                |
++------------------------------------------------------------------+
+|  Today: 18 asked, 11 answered automatically (61%), 7 in inbox    |
++------------------------------------------------------------------+
+</code></pre>
+<p>Data needed: <code>GET /api/inbox</code>.</p>
+<h3 id="screen-6-inbox-item-detail">Screen 6: Inbox item detail</h3>
+<pre><code>+------------------------------------------------------------------+
+|  &lt; Back   [YELLOW]  Revenue from Rio last quarter?               |
++-------------------------------+----------------------------------+
+|  Attempt groups               |  SQL (editable)                  |
+|  A: 5 attempts = 812,400      |  SELECT SUM(...) ...             |
+|  B: 3 attempts = 901,233      |                                  |
+|  (click a group to load SQL)  |  [Run]                           |
+|                               |  Result table                    |
+|  Why not green:               |                                  |
+|  5 of 8 agree, needs 7        |                                  |
++-------------------------------+----------------------------------+
+|  [ ] Save as known number                                        |
+|  [ ] Save a meaning: [ revenue = ... excluding cancelled ]       |
+|  [Approve]   [Approve my fix]   [Reject: reason ...]             |
++------------------------------------------------------------------+
+</code></pre>
+<p>Data needed: <code>GET /api/inbox/{id}</code>, <code>POST /api/sql/run</code>, <code>POST /api/inbox/{id}/resolve</code>.</p>
+<h3 id="screen-7-knowledge">Screen 7: Knowledge</h3>
+<pre><code>+------------------------------------------------------------------+
+|  KNOWLEDGE (what the analyst has taught Verdict)    DB: Olist    |
++------------------------------------------------------------------+
+|  Meanings                                                        |
+|  revenue   = SUM(payment_value), delivered orders    [edit][del] |
+|  late      = delivered after estimated date          [edit][del] |
++------------------------------------------------------------------+
+|  Approved examples                                               |
+|  &quot;Revenue from Rio last quarter?&quot;  -&gt; SQL, 812,400   approved by |
+|                                                      analyst     |
++------------------------------------------------------------------+
+|  Known numbers                                                   |
+|  Orders in 2017 = 45,101                         [re-check now]  |
++------------------------------------------------------------------+
+</code></pre>
+<p>Data needed: <code>GET/POST/DELETE /api/knowledge/...</code>.</p>
+<h3 id="screen-8-trust-dashboard">Screen 8: Trust Dashboard</h3>
+<pre><code>+------------------------------------------------------------------+
+|  TRUST REPORT        Model: [Qwen GRPO v]   Data: [BIRD dev v]   |
++------------------------------------------------------------------+
+|  When Verdict says green, it is right   91%  (88-94%)            |
+|  Questions answered with no human       52%                      |
+|  Confident-wrong answers caught         x of y                   |
++------------------------------------------------------------------+
+|  Compared with:                                                  |
+|  One plain AI answer      right 55%, always shown                |
+|  Majority vote            right 60%, always shown                |
+|  Refuse everything        0% coverage                            |
+|  Verdict green            right 91%, 52% coverage                |
++------------------------------------------------------------------+
+|  Trust slider (from the old TrustDial idea):                     |
+|  &quot;Only answer when agreement is at least [ 6 of 8 ]&quot;             |
+|  -&gt; answers 52% of questions, 91% of those right                 |
+|  (risk-coverage curve chart)                                     |
++------------------------------------------------------------------+
+|  Unanswerable: caught 92% (range), wrongly refused 4%            |
+|  Per database: Olist held-out, BIRD financial, BIRD debit card   |
++------------------------------------------------------------------+
+</code></pre>
+<p>All numbers come from <code>results.json</code> (precomputed). Placeholder numbers in this sketch are examples only.</p>
+<h3 id="screen-9-data">Screen 9: Data</h3>
+<pre><code>+------------------------------------------------------------------+
+|  DATA                                                            |
+|  Current: Olist e-commerce (9 tables, 99,441 orders)             |
+|  Switch: [Olist] [BIRD financial] [BIRD debit card] [Upload...]  |
++------------------------------------------------------------------+
+|  Tables                      | Columns of selected table         |
+|  orders          99,441 rows | order_id        TEXT              |
+|  order_items    112,650 rows | customer_id     TEXT              |
+|  ...                         | order_status    TEXT              |
++------------------------------------------------------------------+
+|  Model:  ( ) Cloud - Gemini     (o) Private - Qwen (offline)     |
+|  Status: Qwen running locally, 1.5B, last answer 3.2 s           |
++------------------------------------------------------------------+
+</code></pre>
+<h3 id="screen-10-model-arena-demo-page">Screen 10: Model Arena (demo page)</h3>
+<pre><code>+------------------------------------------------------------------+
+|  MODEL ARENA      Question: [ pick a scripted question v ] [Go]  |
++---------------+---------------+---------------+------------------+
+|  [machine 1]  |  [machine 2]  |  [machine 3]  |   [machine 4]    |
+|  small robot  | robot + book  | robot from gym|  giant + cloud   |
+|  Qwen Base    | Qwen + SFT    | Qwen SFT+GRPO |  Gemini          |
+|  1.5B, local  | 1.5B, local   | 1.5B, local   |  huge, cloud     |
++---------------+---------------+---------------+------------------+
+|  SQL ...      |  SQL ...      |  SQL ...      |  SQL ...         |
+|  Answer: 412  |  Answer: 388  |  Answer: 388  |  Answer: 388     |
+|  [WRONG]      |  [CORRECT]    |  [CORRECT]    |  [CORRECT]       |
+|  Verdict: Red |  Verdict: Yel |  Verdict: Grn |  Verdict: Green  |
++---------------+---------------+---------------+------------------+
+|  SCOREBOARD (full evaluation)                                    |
+|  BIRD dev accuracy (1,534)   X%      Y%      Z%      G%          |
+|  Olist held-out (100)        ..      ..      ..      ..          |
+|  Runs offline                yes     yes     yes     no          |
+|  Cost per 1,000 questions    0       0       0       $..         |
+|  Speed per question          ..      ..      ..      ..          |
+|  Green right (with Verdict)  ..      ..      ..      ..          |
++------------------------------------------------------------------+
+|  &quot;Small model alone loses. Small model + Verdict green = trust.&quot; |
++------------------------------------------------------------------+
+</code></pre>
+<ul>
+<li>Machines are your own original artwork.</li>
+<li>Animation: each machine "thinks", prints SQL, then the verifier stamps it.</li>
+<li>Race answers come from cache (<code>results.json</code> / demo cache), so it never fails on stage.</li>
+<li>Honesty rules: same questions, same prompt, same scoring for all; show ranges; no "win" claimed for gaps under 3 to 5 points.</li>
+</ul>
+<h3 id="mapping-old-frontend-stubs-to-new-screens">Mapping old frontend stubs to new screens</h3>
+<table>
+<thead>
+<tr>
+<th>Old stub</th>
+<th>New screen</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Landing.tsx</code></td>
+<td>Optional intro / start of the demo (can reuse the 3 preset questions idea)</td>
+</tr>
+<tr>
+<td><code>Console.tsx</code></td>
+<td>Ask + Receipt</td>
+</tr>
+<tr>
+<td><code>TrustDial.tsx</code></td>
+<td>The slider inside Trust Dashboard</td>
+</tr>
+<tr>
+<td><code>Dashboard.tsx</code></td>
+<td>Model Arena</td>
+</tr>
+<tr>
+<td><code>History.tsx</code></td>
+<td>Analyst Inbox + Knowledge</td>
+</tr>
+<tr>
+<td><code>Audit.tsx</code></td>
+<td>A section of Trust Dashboard (only if the hand audit happens)</td>
+</tr>
+<tr>
+<td><code>Hacking.tsx</code></td>
+<td>Dropped</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-backend">7. Backend</h2>
+<h3 id="tech">Tech</h3>
+<ul>
+<li>Python, FastAPI, Uvicorn.</li>
+<li>App state stored in one SQLite file: <code>data/app.db</code> (separate from the user databases, which are only opened read-only).</li>
+<li>Models reached through the existing <code>SQLWriter</code> interface.</li>
+</ul>
+<h3 id="folder-layout-new-parts-marked-new">Folder layout (new parts marked NEW)</h3>
+<pre><code>verdict/
+  api/
+    main.py                 NEW  FastAPI app, CORS, routers
+    routes/
+      ask.py                NEW  /api/ask, /api/asks
+      inbox.py              NEW  /api/inbox
+      knowledge.py          NEW  /api/knowledge
+      data.py               NEW  /api/databases, /api/upload, /api/schema
+      models.py             NEW  /api/models, /api/settings
+      sql.py                NEW  /api/sql/run
+      results.py            NEW  /api/results (serves results.json)
+    schemas/                NEW  Pydantic request/response models
+  engine/
+    ask.py                  exists, extended: prompt gets knowledge, returns checks
+    llm.py                  exists, add OpenAICompatWriter (vLLM + Ollama)
+    group.py                exists
+    trust.py                exists, extended: split rule, known-number rule
+    ambiguity.py            NEW  detects two big groups, labels each meaning
+    knowledge.py            NEW  meanings, approved examples, known numbers, retrieval
+    checks.py               NEW  builds the receipt's check list
+  store/
+    db.py                   NEW  app.db tables and queries
+  eval/
+    harness.py              exists
+    calibration.py          exists
+    export.py               NEW (stub today)  writes results.json
+    baselines.py            NEW  single / vote / refuse-all numbers
+</code></pre>
+<h3 id="app-database-dataappdb">App database (<code>data/app.db</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Columns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>databases</code></td>
+<td>id, name, path, source (preloaded/upload), tables_count, created_at</td>
+</tr>
+<tr>
+<td><code>asks</code></td>
+<td>id, database_id, question, model, level, answer_rows (json), sql, groups (json), checks (json), reason, latency_ms, created_at</td>
+</tr>
+<tr>
+<td><code>inbox_items</code></td>
+<td>id, ask_id, status (open/approved/fixed/rejected), final_sql, final_rows (json), note, resolved_at</td>
+</tr>
+<tr>
+<td><code>meanings</code></td>
+<td>id, database_id, term, definition, sql_hint, created_at</td>
+</tr>
+<tr>
+<td><code>examples</code></td>
+<td>id, database_id, question, sql, rows (json), from_inbox_id, created_at</td>
+</tr>
+<tr>
+<td><code>known_numbers</code></td>
+<td>id, database_id, name, question, sql, value (json), last_checked_at, last_ok</td>
+</tr>
+<tr>
+<td><code>settings</code></td>
+<td>key, value (current db, current model, second model on/off)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="decision-rules-final-version">Decision rules (final version)</h3>
+<p>Checked in this order:</p>
+<ol>
+<li><strong>Can't answer</strong>: more than half the attempts said <code>CANNOT_ANSWER</code>.</li>
+<li><strong>Did you mean?</strong>: the two largest groups each have at least 3 of 8 attempts, and their answers differ.</li>
+<li><strong>Red</strong>: agreement below the yellow threshold, or most attempts failed to run.</li>
+<li><strong>Yellow</strong>: any of: agreement between yellow and green threshold; empty answer; conflict with an approved answer; second model disagrees (if on).</li>
+<li><strong>Green</strong>: agreement at or above the green threshold and no yellow condition.</li>
+</ol>
+<p>Thresholds come from <code>thresholds.json</code>, fitted on day 5 from real data (calibration split), and reported on the test split.</p>
+<h3 id="model-writers">Model writers</h3>
+<ul>
+<li><code>GeminiWriter</code>: exists.</li>
+<li><code>OpenAICompatWriter</code> (NEW): one class, takes <code>base_url</code> and <code>model</code>. It works with:</li>
+<li>vLLM server on the college GPU (<code>http://&lt;gpu-pc&gt;:8000/v1</code>)</li>
+<li>Ollama on the laptop (<code>http://localhost:11434/v1</code>)</li>
+<li>Writers only write SQL. They never decide trust.</li>
+</ul>
+<h3 id="prompt-extended">Prompt (extended)</h3>
+<pre><code>system: You write one SQLite query... If the tables cannot answer, reply CANNOT_ANSWER.
+schema: &lt;tables and columns&gt;
+meanings: revenue = SUM(payment_value) for delivered orders; ...
+examples: Q: ... SQL: ...   (top 3 most similar approved examples)
+question: &lt;user question&gt;
+</code></pre>
+<p>Similarity: TF-IDF over approved questions (no extra model needed, works offline). Upgrade to a small embedding model only if time allows.</p>
+<hr />
+<h2 id="8-api-contract">8. API contract</h2>
+<p>All responses are JSON. Base path <code>/api</code>.</p>
+<h3 id="post-apiask"><code>POST /api/ask</code></h3>
+<p>Request:</p>
+<pre><code class="language-json">{ &quot;question&quot;: &quot;What were sales in Sao Paulo last month?&quot;, &quot;database_id&quot;: &quot;olist&quot;, &quot;model&quot;: &quot;qwen-grpo&quot; }
+</code></pre>
+<p>Response:</p>
+<pre><code class="language-json">{
+  &quot;ask_id&quot;: &quot;a_102&quot;,
+  &quot;level&quot;: &quot;green&quot;,
+  &quot;answer_text&quot;: &quot;1,284,330.12&quot;,
+  &quot;columns&quot;: [&quot;total_sales&quot;],
+  &quot;rows&quot;: [[1284330.12]],
+  &quot;sql&quot;: &quot;SELECT SUM(...) ...&quot;,
+  &quot;reason&quot;: &quot;7 of 8 attempts agree&quot;,
+  &quot;groups&quot;: [
+    { &quot;size&quot;: 7, &quot;sql&quot;: &quot;SELECT ...&quot;, &quot;preview&quot;: [[1284330.12]] },
+    { &quot;size&quot;: 1, &quot;sql&quot;: &quot;SELECT ...&quot;, &quot;preview&quot;: [[1301882.0]] }
+  ],
+  &quot;n_attempts&quot;: 8, &quot;n_cannot_answer&quot;: 0, &quot;n_failed&quot;: 0,
+  &quot;checks&quot;: [
+    { &quot;name&quot;: &quot;safe&quot;, &quot;status&quot;: &quot;pass&quot;, &quot;detail&quot;: &quot;read-only, nothing blocked&quot; },
+    { &quot;name&quot;: &quot;agreement&quot;, &quot;status&quot;: &quot;pass&quot;, &quot;detail&quot;: &quot;7 of 8&quot; },
+    { &quot;name&quot;: &quot;second_model&quot;, &quot;status&quot;: &quot;off&quot;, &quot;detail&quot;: &quot;&quot; }
+  ],
+  &quot;options&quot;: null,
+  &quot;knowledge_used&quot;: [&quot;revenue = SUM(payment_value), delivered only&quot;],
+  &quot;tested_trust&quot;: { &quot;precision&quot;: 0.91, &quot;low&quot;: 0.88, &quot;high&quot;: 0.94, &quot;on&quot;: &quot;BIRD dev, 1,534&quot; },
+  &quot;model&quot;: &quot;qwen-grpo&quot;, &quot;latency_ms&quot;: 3200
+}
+</code></pre>
+<p>When <code>level</code> is <code>"did_you_mean"</code>, <code>options</code> is a list:</p>
+<pre><code class="language-json">[ { &quot;label&quot;: &quot;Product price only&quot;, &quot;sql&quot;: &quot;...&quot;, &quot;rows&quot;: [[6155806]], &quot;size&quot;: 4 },
+  { &quot;label&quot;: &quot;Price plus freight&quot;, &quot;sql&quot;: &quot;...&quot;, &quot;rows&quot;: [[7142672]], &quot;size&quot;: 4 } ]
+</code></pre>
+<p>When <code>level</code> is <code>"cannot_answer"</code>, <code>reason</code> says what seems missing.</p>
+<h3 id="other-endpoints">Other endpoints</h3>
+<table>
+<thead>
+<tr>
+<th>Method and path</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/asks?limit=20</code></td>
+<td>Recent questions with level</td>
+</tr>
+<tr>
+<td><code>GET /api/asks/{id}</code></td>
+<td>Full record for the receipt</td>
+</tr>
+<tr>
+<td><code>POST /api/asks/{id}/choose</code></td>
+<td>Manager picks option A or B (<code>{"option": 0}</code>)</td>
+</tr>
+<tr>
+<td><code>GET /api/inbox?status=open&amp;level=red</code></td>
+<td>Inbox list</td>
+</tr>
+<tr>
+<td><code>GET /api/inbox/{id}</code></td>
+<td>One item with groups and draft SQL</td>
+</tr>
+<tr>
+<td><code>POST /api/inbox/{id}/resolve</code></td>
+<td><code>{"action": "approve", "sql": "...", "note": "...", "save_meaning": {...}, "save_known_number": true}</code> (action is approve, fix or reject)</td>
+</tr>
+<tr>
+<td><code>POST /api/sql/run</code></td>
+<td><code>{"database_id": "...", "sql": "..."}</code> runs through the verifier, returns rows or status</td>
+</tr>
+<tr>
+<td><code>GET /api/knowledge?database_id=olist</code></td>
+<td>Meanings, examples, known numbers</td>
+</tr>
+<tr>
+<td><code>POST /api/knowledge/meanings</code></td>
+<td>Add a meaning</td>
+</tr>
+<tr>
+<td><code>DELETE /api/knowledge/{kind}/{id}</code></td>
+<td>Remove an item</td>
+</tr>
+<tr>
+<td><code>POST /api/knowledge/known/{id}/recheck</code></td>
+<td>Run a known number again, report if it changed</td>
+</tr>
+<tr>
+<td><code>GET /api/databases</code></td>
+<td>Preloaded and uploaded databases</td>
+</tr>
+<tr>
+<td><code>POST /api/databases/upload</code></td>
+<td>Multipart file upload (CSV, XLSX, SQLite)</td>
+</tr>
+<tr>
+<td><code>GET /api/databases/{id}/schema</code></td>
+<td>Tables, columns, row counts</td>
+</tr>
+<tr>
+<td><code>GET /api/models</code></td>
+<td>Available models and whether each is reachable</td>
+</tr>
+<tr>
+<td><code>PUT /api/settings</code></td>
+<td>Current database, model, second-model on/off</td>
+</tr>
+<tr>
+<td><code>GET /api/results</code></td>
+<td><code>results.json</code> for Trust Dashboard and Model Arena</td>
+</tr>
+<tr>
+<td><code>GET /api/arena/{question_key}</code></td>
+<td>Cached 4-model answers for one scripted question</td>
+</tr>
+<tr>
+<td><code>GET /api/health</code></td>
+<td>Server, models and database status</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9-connections-how-everything-talks">9. Connections: how everything talks</h2>
+<pre><code> +--------------------+        HTTP/JSON         +-------------------------+
+ |  FRONTEND          |  ---------------------&gt;  |  BACKEND (FastAPI)      |
+ |  React + Vite + TS |  &lt;---------------------  |  verdict/api            |
+ |  Tailwind          |                          |                         |
+ +--------------------+                          |  engine: ask, group,    |
+                                                 |  trust, ambiguity,      |
+                                                 |  knowledge, checks      |
+                                                 +-----+-----------+-------+
+                                                       |           |
+                                    OpenAI-compatible  |           |  read-only,
+                                    HTTP               |           |  separate process
+                                                       v           v
+              +----------------------+   +----------------+   +--------------------+
+              | Qwen on laptop       |   | Qwen on college|   | User databases     |
+              | Ollama (GGUF)        |   | GPU (vLLM)     |   | Olist, BIRD, upload|
+              | offline demo         |   | evaluation     |   | (SQLite, mode=ro)  |
+              +----------------------+   +----------------+   +--------------------+
+                                                       |
+                                          Gemini API (optional, cloud mode)
+
+              +--------------------+         +-------------------------+
+              | data/app.db        |         | results/results.json    |
+              | asks, inbox,       |         | precomputed proof for   |
+              | knowledge          |         | Trust + Arena pages     |
+              +--------------------+         +-------------------------+
+</code></pre>
+<h3 id="rules">Rules</h3>
+<ul>
+<li>The frontend never talks to a model or a database directly. Only the backend does.</li>
+<li>User databases are always opened read-only. Every query goes through the verifier.</li>
+<li>Only table and column names go to a cloud model, never rows.</li>
+<li>Proof pages read <code>results.json</code>, so they work with no GPU and no internet.</li>
+<li>Demo questions are cached, so the live demo cannot be broken by wifi.</li>
+</ul>
+<h3 id="where-things-run">Where things run</h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Frontend</th>
+<th>Backend</th>
+<th>Model</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Development</td>
+<td><code>npm run dev</code> on laptop</td>
+<td><code>uvicorn</code> on laptop</td>
+<td>vLLM on college GPU, or Ollama</td>
+</tr>
+<tr>
+<td>Evaluation runs</td>
+<td>not needed</td>
+<td>scripts on college GPU</td>
+<td>vLLM on college GPU</td>
+</tr>
+<tr>
+<td>Demo day</td>
+<td>laptop</td>
+<td>laptop</td>
+<td>Ollama on laptop (offline)</td>
+</tr>
+<tr>
+<td>Shareable link (after demo)</td>
+<td>Vercel</td>
+<td>college GPU PC behind a secure tunnel</td>
+<td>vLLM</td>
+</tr>
+</tbody>
+</table>
+<p>Note: vLLM runs on Linux. On Windows gaming PCs, use WSL2, or fall back to Hugging Face generation (slower) or a llama.cpp server.</p>
+<hr />
+<h2 id="10-databases-we-bring">10. Databases we bring</h2>
+<table>
+<thead>
+<tr>
+<th>Database</th>
+<th>Role</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Olist Brazilian E-commerce</strong> (Kaggle)</td>
+<td>Main live demo, classmates' held-out test</td>
+<td>Real company data, about 100k orders, 9 tables. Natural ambiguity (price vs price plus freight, cancelled orders, split payments). No ad spend, so "ad ROI" is a natural can't-answer. Model has never seen it.</td>
+</tr>
+<tr>
+<td><strong>BIRD financial</strong></td>
+<td>Switch-to database, official numbers</td>
+<td>Czech bank data. Already in the project.</td>
+</tr>
+<tr>
+<td><strong>BIRD debit_card_specializing</strong></td>
+<td>Switch-to database</td>
+<td>Fuel-card company. Already in the project.</td>
+</tr>
+<tr>
+<td><strong>AdventureWorks</strong></td>
+<td>Only if schema selection works by day 10</td>
+<td>About 70 tables, too big for a 1.5B prompt without table selection.</td>
+</tr>
+<tr>
+<td><strong>Live upload</strong></td>
+<td>Realness moment</td>
+<td>A judge's CSV, or unseen public CSVs on a USB stick. Tell the room: "On new data it sends more to the analyst. That is the safety working."</td>
+</tr>
+</tbody>
+</table>
+<p>Not bringing: TPC-DS (too big and hard for live use), Spider 2.0 (lives in cloud warehouses, cannot be uploaded; mention as future work).</p>
+<p>Olist preparation: load the CSVs into one SQLite file, keep the original column names, add indexes on join keys, check row counts.</p>
+<hr />
+<h2 id="11-models-qwen-and-gemini">11. Models: Qwen and Gemini</h2>
+<h3 id="qwen-main-engine">Qwen (main engine)</h3>
+<ul>
+<li>Qwen2.5-Coder-1.5B, three versions: base, SFT, SFT+GRPO (verifier as reward).</li>
+<li>Training is in progress on the college GPUs.</li>
+<li>For the product: the best version is served with vLLM (college GPU) and Ollama (laptop).</li>
+<li>Laptop packaging: merge LoRA into the base weights, convert to GGUF (Q4 or Q5), load in Ollama. Measure speed. If 8 attempts are too slow on CPU, use fewer attempts on the laptop and say so in the receipt, or rely on cached demo answers.</li>
+</ul>
+<h3 id="gemini-optional">Gemini (optional)</h3>
+<p>Decision on <strong>day 6</strong>, after Qwen's numbers:</p>
+<ul>
+<li>Qwen accuracy around 50% or higher, and green coverage at least about 30%: Qwen alone. Gemini appears only in the Arena as a comparison.</li>
+<li>Qwen lower: Gemini becomes "Cloud mode" in the product, Qwen stays as "Private mode".</li>
+<li>Either way, Gemini can be the optional "second model" check.</li>
+<li>Cost: a paid Flash-class run of about 12,000 calls should be cheap. Check current pricing before the run.</li>
+</ul>
+<hr />
+<h2 id="12-proof-what-we-measure-and-how">12. Proof: what we measure and how</h2>
+<h3 id="a-model-quality-model-arena">A. Model quality (Model Arena)</h3>
+<p>For Qwen base, SFT, SFT+GRPO and Gemini, on all 1,534 BIRD dev questions, single greedy answer:</p>
+<ul>
+<li>Execution accuracy with 95% range.</li>
+<li>Share of SQL that ran.</li>
+<li>Paired comparison base vs SFT and SFT vs GRPO (same questions, McNemar test).</li>
+<li>Same prompt and scoring for all models.</li>
+</ul>
+<p>Rule: do not trust results from 60 or 300 questions. Use the full set.</p>
+<h3 id="b-verdict-quality-trust-dashboard">B. Verdict quality (Trust Dashboard)</h3>
+<p>With 8 attempts per question on the best Qwen (and Gemini if used):</p>
+<ul>
+<li><strong>Green precision</strong>: share of green answers that are right, with range. Target 90%, lower end of range at least 85%.</li>
+<li><strong>Green coverage</strong>: share of questions that are green. Target at least 30 to 40%.</li>
+<li><strong>Answered with no human</strong>: green plus correctly handled can't-answer.</li>
+<li><strong>Confident-wrong</strong>: wrong answers where 8 of 8 agreed. Report how many the extra checks catch.</li>
+<li><strong>Baselines</strong>: single answer, majority vote, refuse everything. Verdict must beat them on the risk-coverage curve.</li>
+<li>Thresholds fitted on the calibration half, reported on the test half.</li>
+</ul>
+<h3 id="c-unanswerable">C. Unanswerable</h3>
+<ul>
+<li>Recall (caught) target 90%, wrongly refused under 5%.</li>
+<li>Include partial-missing cases (one column or one year missing), not only full tables removed.</li>
+<li>Compare with the refuse-everything baseline (the TrustSQL lesson).</li>
+</ul>
+<h3 id="d-real-world-checks">D. Real-world checks</h3>
+<ul>
+<li>100 Olist questions written by 5 classmates, never seen before the run.</li>
+<li>20 questions per demo database, green precision for each.</li>
+<li>50 split cases checked by hand: how many are real ambiguity.</li>
+</ul>
+<h3 id="e-safety">E. Safety</h3>
+<ul>
+<li>Hostile query set: 100% blocked or killed.</li>
+<li>Database file hash unchanged after all runs.</li>
+</ul>
+<h3 id="honesty-rules">Honesty rules</h3>
+<ul>
+<li>Never show a number without its range.</li>
+<li>Never claim a win for a gap under about 3 to 5 points.</li>
+<li>Say "share of questions that needed no human", not "analyst workload cut", unless real analysts measured it.</li>
+<li>If GRPO adds little over SFT, show that.</li>
+<li>Never show a check that does not run.</li>
+</ul>
+<hr />
+<h2 id="13-the-20-day-plan">13. The 20-day plan</h2>
+<p>You design screens in parallel with the backend work. Each block lists what "done" means.</p>
+<h3 id="days-1-to-3-19-to-21-nov-foundations">Days 1 to 3 (19 to 21 Nov): foundations</h3>
+<ul>
+<li>Load Olist into SQLite. Write 60 demo questions (easy, ambiguous, impossible, dangerous).</li>
+<li>Message 5 classmates today: each writes 20 Olist questions. You do not read them.</li>
+<li>FastAPI skeleton with <code>/api/health</code>, <code>/api/ask</code> (wrapping existing <code>ask.py</code>), <code>/api/databases</code>.</li>
+<li><code>OpenAICompatWriter</code> working against vLLM or another server on the college GPU.</li>
+<li>You: design Ask, Receipt, Inbox, Inbox detail first.</li>
+<li><strong>Done when</strong>: <code>curl /api/ask</code> returns a real answer from Qwen on Olist.</li>
+</ul>
+<h3 id="days-4-to-6-22-to-24-nov-proof-numbers">Days 4 to 6 (22 to 24 Nov): proof numbers</h3>
+<ul>
+<li>Greedy evaluation of base, SFT, SFT+GRPO (and Gemini) on 1,534 BIRD dev.</li>
+<li>8-attempt harness run on the best model.</li>
+<li>Fit thresholds, compute baselines, write the first <code>results.json</code>.</li>
+<li>Hand-check 50 split cases.</li>
+<li>Day 6: Gemini decision.</li>
+<li><strong>Done when</strong>: real numbers replace every placeholder in <code>thresholds.json</code> and the dashboard sketch.</li>
+</ul>
+<h3 id="days-7-to-8-25-to-26-nov-checks-and-learning-loop">Days 7 to 8 (25 to 26 Nov): checks and learning loop</h3>
+<ul>
+<li><code>ambiguity.py</code> (did-you-mean with labels), <code>checks.py</code>, <code>knowledge.py</code>, app.db tables.</li>
+<li>Inbox endpoints, resolve, meanings, examples, known numbers.</li>
+<li><strong>Done when</strong>: the demo sequence works through the API: yellow, fix, similar question green.</li>
+</ul>
+<h3 id="days-9-to-14-27-nov-to-2-dec-frontend">Days 9 to 14 (27 Nov to 2 Dec): frontend</h3>
+<ul>
+<li>React + Vite + TypeScript + Tailwind, built from your designs.</li>
+<li>Order: Ask and Receipt, then Inbox and detail, then Did-you-mean and Can't-answer states, then Data, Knowledge, Trust, Arena.</li>
+<li><strong>Done when</strong>: the full 5-question demo runs in the browser.</li>
+</ul>
+<h3 id="days-15-to-16-3-to-4-dec-private-mode-on-the-laptop">Days 15 to 16 (3 to 4 Dec): private mode on the laptop</h3>
+<ul>
+<li>Merge, convert to GGUF, Ollama. Measure speed. Cache demo answers.</li>
+<li><strong>Done when</strong>: the demo runs with the wifi off.</li>
+</ul>
+<h3 id="days-17-to-18-5-to-6-dec-final-numbers-and-slides">Days 17 to 18 (5 to 6 Dec): final numbers and slides</h3>
+<ul>
+<li>Run the classmates' 100 Olist questions and the per-database checks.</li>
+<li>Final <code>results.json</code>. Slides.</li>
+<li><strong>Done when</strong>: every number on every slide comes from a saved file.</li>
+</ul>
+<h3 id="days-19-to-20-7-to-8-dec-polish">Days 19 to 20 (7 to 8 Dec): polish</h3>
+<ul>
+<li>Rehearse the scripted demo 10 times. Record the backup video.</li>
+<li><strong>Done when</strong>: a friend can watch the demo without anything going wrong.</li>
+</ul>
+<h3 id="days-21-to-30-9-dec-to-demo-day-buffer">Days 21 to 30 (9 Dec to demo day): buffer</h3>
+<ul>
+<li>Fixes, rehearsal, stretch items (hand audit, shuffled-reward control, AdventureWorks).</li>
+</ul>
+<hr />
+<h2 id="14-demo-day-script">14. Demo day script</h2>
+<p>About 3 minutes. Everything scripted, everything cached.</p>
+<p><strong>0:00 to 0:20, problem</strong>
+"Companies use AI to answer data questions. Sometimes it is confidently wrong, and those numbers go into real decisions. So analysts still check everything by hand."</p>
+<p><strong>0:20 to 1:30, product (Olist, manager view)</strong></p>
+<ol>
+<li>"What were sales in Sao Paulo last month?" Green, receipt open for 5 seconds.</li>
+<li>"What was our revenue in 2017?" Did you mean: price only, or price plus freight?</li>
+<li>"What was our advertising ROI?" Can't answer: no ad spend in the data.</li>
+<li>A question the model gets wrong. Red, goes to the analyst inbox.</li>
+</ol>
+<p><strong>1:30 to 2:00, analyst and learning loop</strong></p>
+<ol>
+<li>Switch to analyst view. Inbox has 1 item. Fix the SQL, save the meaning, approve.</li>
+<li>Ask a similar question as manager. Green.</li>
+</ol>
+<p><strong>2:00 to 2:20, private mode</strong></p>
+<ol>
+<li>Turn the wifi off. Switch to Private. Ask a question. Qwen answers on the laptop.</li>
+</ol>
+<p><strong>2:20 to 2:50, proof (Arena and Trust)</strong></p>
+<ol>
+<li>Four machines: base, SFT, GRPO, Gemini. Scoreboard: X, Y, Z, G.</li>
+<li>"When Verdict says green, it is right N% of the time, tested on 1,534 questions, and on 100 questions our classmates wrote that we never saw."</li>
+</ol>
+<p><strong>2:50 to 3:00, close</strong>
+"We did not build another chatbot. We built the part that comes after generation: knowing which AI answers are safe enough that a human does not need to check them."</p>
+<p>Optional if asked: switch the database, or upload a judge's CSV.</p>
+<hr />
+<h2 id="15-judge-questions-and-answers">15. Judge questions and answers</h2>
+<ul>
+<li><strong>"Isn't this just ChatGPT on SQL?"</strong> ChatGPT gives answers. Verdict checks answers, routes uncertain ones to a human, and its trust level is measured on 1,534 questions.</li>
+<li><strong>"How do you know it works?"</strong> Calibrated on one half of the questions, tested on the other half, with confidence ranges, plus 100 held-out questions from classmates.</li>
+<li><strong>"What if all 8 attempts make the same mistake?"</strong> That happens. Our pilot showed 8 of 8 agreement was right only about half the time. That is why there are extra checks: known approved answers, the split detector, and an optional second model. Thresholds are measured, not guessed.</li>
+<li><strong>"Is your 1.5B model good enough?"</strong> Alone, no. With Verdict, its green answers are trustworthy and the rest go to an analyst. Training raised the green share from A to B.</li>
+<li><strong>"Doesn't Databricks Genie / Snowflake Cortex Analyst do this?"</strong> They show there is demand for asking data questions in plain language. Verdict focuses on a narrower problem: deciding which answers are safe to show without a human, and running privately on a small model.</li>
+<li><strong>"Is it safe to run AI-written SQL on company data?"</strong> Read-only connection, SQLite authorizer, separate killable process, time limit, about 134 tests, hostile queries 100% blocked, database file unchanged.</li>
+<li><strong>"What did GRPO add?"</strong> Show the paired comparison. If it is small, say so: the main gain came from SFT, and that is an honest research result.</li>
+<li><strong>"What's next?"</strong> Postgres and warehouses, shadow mode next to a real analyst for 2 weeks, and measuring real time saved.</li>
+</ul>
+<hr />
+<h2 id="16-risks-and-backups">16. Risks and backups</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Backup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen accuracy too low</td>
+<td>Gemini as cloud mode; Qwen stays as private mode with honest numbers</td>
+</tr>
+<tr>
+<td>GRPO adds nothing over SFT</td>
+<td>Report it honestly; story still holds (SFT model + Verdict)</td>
+</tr>
+<tr>
+<td>Laptop too slow for 8 attempts</td>
+<td>Fewer attempts on laptop, cached demo answers, GPU PC on LAN as fallback</td>
+</tr>
+<tr>
+<td>vLLM will not run on Windows GPU PCs</td>
+<td>WSL2, or Hugging Face generation, or llama.cpp server</td>
+</tr>
+<tr>
+<td>Agreement thresholds give low coverage</td>
+<td>Show the trust slider: the trade-off between coverage and accuracy is the honest product</td>
+</tr>
+<tr>
+<td>Wifi or API fails on stage</td>
+<td>Everything cached, offline mode, backup video</td>
+</tr>
+<tr>
+<td>Frontend takes longer</td>
+<td>Build screens in order of the demo; Knowledge and Data pages can be simple</td>
+</tr>
+<tr>
+<td>Classmates late with questions</td>
+<td>Ask on day 1; deadline day 10</td>
+</tr>
+<tr>
+<td>Judge uploads a strange file</td>
+<td>Test 5 to 10 random CSVs before demo day</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="17-what-we-are-not-building">17. What we are not building</h2>
+<p>Data pipelines, ETL, streaming, a warehouse, full BI dashboards, charts, a generic chatbot, multi-agent systems, our own vector database, 10 models, login and roles, billing, Kubernetes, many integrations, a semantic layer, recurring reports, the "why did it change" engine, data-request tickets, lineage narratives, the reward-hacking perturbation (C4), and the 25 numbered docs.</p>
+<hr />
+<h2 id="18-build-guide-how-to-work-through-this">18. Build guide: how to work through this</h2>
+<h3 id="daily-routine">Daily routine</h3>
+<ol>
+<li>Morning: open section 13, pick today's block.</li>
+<li>Build only what that block says.</li>
+<li>Evening: run the tests (<code>pytest</code>), commit, and write one line in <code>LOG.md</code>.</li>
+<li>If something new comes up, write it under "Later" in this file instead of building it.</li>
+</ol>
+<h3 id="order-of-building-never-change-this">Order of building (never change this)</h3>
+<ol>
+<li>Numbers first (they decide what the demo can claim).</li>
+<li>API second (the frontend needs real data).</li>
+<li>Screens third, in demo order.</li>
+<li>Polish last.</li>
+</ol>
+<h3 id="setup-commands-to-be-confirmed-as-each-part-is-built">Setup commands (to be confirmed as each part is built)</h3>
+<p>Backend:</p>
+<pre><code>pip install -e .
+pip install fastapi uvicorn python-multipart
+uvicorn verdict.api.main:app --reload --port 8000
+</code></pre>
+<p>Frontend (created on day 9):</p>
+<pre><code>cd frontend
+npm create vite@latest . -- --template react-ts
+npm install
+npm install -D tailwindcss
+npm run dev
+</code></pre>
+<p>Model servers:</p>
+<pre><code># college GPU (Linux or WSL2)
+vllm serve &lt;path-to-merged-qwen&gt; --port 8000
+
+# laptop, offline
+ollama create verdict-qwen -f Modelfile
+ollama serve
+</code></pre>
+<h3 id="definition-of-done-for-the-whole-project">Definition of done for the whole project</h3>
+<ul>
+<li>The 3-minute demo runs offline, from a cold start, 10 times in a row.</li>
+<li>Every number on screen and on slides comes from a saved results file, with a range.</li>
+<li>Every check on the receipt is a check that actually runs.</li>
+<li>Tests pass in CI.</li>
+</ul>
+<h3 id="open-decisions-fill-in-as-they-are-made">Open decisions (fill in as they are made)</h3>
+<ul>
+<li>Day 6: Gemini in product, yes or no.</li>
+<li>Day 10: AdventureWorks, yes or no.</li>
+<li>Day 14: role toggle or two separate views.</li>
+<li>Final demo day date.</li>
+</ul></main></body></html>
