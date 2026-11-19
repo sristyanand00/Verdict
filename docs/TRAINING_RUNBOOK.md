@@ -230,16 +230,25 @@ Items 5 and 6 are still open. The original list:
 
 Long runs must keep going if the Claude session closes. So the user starts
 them in a **separate PowerShell window** (not the one Claude uses), does the
-"every new terminal" lines from section 4, then runs the command with output
-going to a log file:
+"every new terminal" lines from section 4, then puts
+`python scripts/train_run.py <log file>` in front of the command. The output
+then shows live on screen **and** is saved to the log:
 
 ```
-cmd /c "python <script and args> > E:\verdict_runs\logs\<name>.log 2>&1"
+python scripts/train_run.py E:\verdict_runs\logs\<name>.log python scripts/<script>.py <args>
 ```
 
-That window must stay open until the run ends.
+Example:
 
-Watch progress from any terminal:
+```
+python scripts/train_run.py E:\verdict_runs\logs\base_v2.log python scripts/evaluate.py --model Qwen/Qwen2.5-Coder-1.5B-Instruct --label base_v2 --max-schema-chars 12000 --timeout 30 --workers 4 --gen-batch 8
+```
+
+That window must stay open until the `=== end` line appears. Progress:
+evaluation prints a line every 32 questions, SFT every 10 steps, pass rate
+every 16 questions.
+
+Watch the same log from another terminal (optional):
 
 ```
 Get-Content E:\verdict_runs\logs\<name>.log -Wait -Tail 20
