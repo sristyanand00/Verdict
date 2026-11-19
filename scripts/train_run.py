@@ -9,6 +9,11 @@ written to the log file (appended, with a start and end line). Progress bars
 that redraw one line (model downloads) work too. The child Python runs
 unbuffered, so lines are not held back.
 
+If the command starts with ``python``, it is run with the same Python as
+this script (the active venv). On Windows a bare ``python`` started from a
+venv is otherwise found next to the base interpreter, which lacks the
+project's packages.
+
 The exit code is the command's exit code. Closing the window stops the run,
 so keep it open until the end line appears.
 """
@@ -20,12 +25,22 @@ import time
 from pathlib import Path
 
 
+PYTHON_NAMES = {"python", "python3", "python.exe", "python3.exe"}
+
+
+def resolve_command(command: list[str]) -> list[str]:
+    """Run a leading ``python`` with this script's own interpreter."""
+    if command and command[0].lower() in PYTHON_NAMES:
+        return [sys.executable, *command[1:]]
+    return command
+
+
 def main() -> int:
     if len(sys.argv) < 3:
         print(__doc__)
         return 2
     log_path = Path(sys.argv[1])
-    command = sys.argv[2:]
+    command = resolve_command(sys.argv[2:])
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
