@@ -144,7 +144,7 @@ def main() -> int:
                     amp_dtype() if args.device.startswith("cuda") else "fp32")
         result = evaluate_tasks(
             model, tokenizer, prompts, tasks, reward_fn, max_tokens=args.max_tokens,
-            amp=args.device.startswith("cuda"), chunk=100, log=lambda m: print(m, flush=True),
+            amp=args.device.startswith("cuda"), chunk=32, log=lambda m: print(m, flush=True),
             batch_size=args.gen_batch,
         )
         source = str(args.model)
