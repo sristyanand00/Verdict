@@ -11,14 +11,17 @@ Two ways to train:
   two AdamW states need about 16 bytes per parameter.
 * LoRA (``lora.r > 0``): the original weights are frozen and small low-rank
   matrices are added to the attention and MLP projections (Hu et al., 2021).
-  On CUDA the frozen weights are kept in float16 (half the memory); the LoRA
-  weights are float32 so that small AdamW updates are not rounded away.
+  On CUDA the frozen weights are kept in half precision (half the memory):
+  bfloat16 on GPUs that support it natively (Ampere or newer, e.g. RTX 30xx,
+  A100), float16 otherwise (T4, P100). The LoRA weights are float32 so that
+  small AdamW updates are not rounded away. See ``amp_dtype``.
   A checkpoint then holds only the LoRA weights (tens of MB, not GB).
 """
 
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +31,32 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 #: Qwen2 / Llama-style projection names.
 LORA_TARGETS = ("q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj")
+
+
+def amp_dtype() -> torch.dtype:
+    """The half-precision type used for CUDA autocast and frozen LoRA base weights.
+
+    ``VERDICT_PRECISION`` chooses it: ``fp16``, ``bf16`` or ``auto`` (default).
+    ``auto`` picks bfloat16 only when the GPU supports it natively (compute
+    capability 8 or more). ``torch.cuda.is_bf16_supported()`` is not used,
+    because it also returns True for the slow emulated bfloat16 on a T4.
+    bfloat16 has float32's range, so it needs no GradScaler (see ``needs_grad_scaler``).
+    """
+    choice = os.environ.get("VERDICT_PRECISION", "auto").strip().lower()
+    if choice == "fp16":
+        return torch.float16
+    if choice == "bf16":
+        return torch.bfloat16
+    if choice != "auto":
+        raise ValueError(f"VERDICT_PRECISION must be auto, fp16 or bf16, not {choice!r}")
+    if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8:
+        return torch.bfloat16
+    return torch.float16
+
+
+def needs_grad_scaler() -> bool:
+    """float16 gradients underflow without loss scaling; bfloat16 ones do not."""
+    return amp_dtype() == torch.float16
 
 
 @dataclass
@@ -90,7 +119,7 @@ def prepare_for_training(
 
     from peft import LoraConfig, PeftModel, get_peft_model
 
-    base_dtype = torch.float16 if device.type == "cuda" else torch.float32
+    base_dtype = amp_dtype() if device.type == "cuda" else torch.float32
     model.to(device=device, dtype=base_dtype)
     for p in model.parameters():
         p.requires_grad_(False)

@@ -60,6 +60,7 @@ class EvalResult:
                 "reason": reason,
                 "error": error[:300],
                 "sql": extract_sql(text),
+                "text": text[:1000],
             }
             for t, text, o, reason, error in zip(
                 tasks, self.texts, self.outcomes,
@@ -78,21 +79,40 @@ def evaluate_tasks(
     amp: bool = True,
     chunk: int = 50,
     log=None,
+    batch_size: int = 1,
 ) -> EvalResult:
     """Greedy answers for ``prompts`` scored against ``tasks``' gold SQL.
 
     ``log`` (a print-like function) gets a progress line every ``chunk``
     questions; long evaluations on Kaggle would otherwise look stuck.
+    ``batch_size`` questions are generated together (see ``generate_ids``).
     """
     t0 = time.time()
     config = GenerationConfig(temperature=0, max_tokens=max_tokens)
     texts: list[str] = []
     for i in range(0, len(prompts), chunk):
-        rollouts = generate_ids(model, tokenizer, prompts[i : i + chunk], n_completions=1, amp=amp, config=config)
+        rollouts = generate_ids(model, tokenizer, prompts[i : i + chunk], n_completions=1, amp=amp, config=config,
+                                batch_size=batch_size)
         texts.extend(r.texts[0] for r in rollouts)
         if log and len(prompts) > chunk:
             log(f"  answered {len(texts)}/{len(prompts)} ({time.time() - t0:.0f}s)")
+    return score_texts(texts, tasks, reward_fn, prompts=prompts, t0=t0)
 
+
+def score_texts(
+    texts: list[str],
+    tasks: list[BirdTask],
+    reward_fn: SQLRewardFunction,
+    prompts: list[str] | None = None,
+    t0: float | None = None,
+) -> EvalResult:
+    """Score already written answers against ``tasks``' gold SQL.
+
+    Used by ``evaluate_tasks`` and to re-score a saved evaluation with other
+    settings (for example a longer time limit) without generating again.
+    """
+    t0 = time.time() if t0 is None else t0
+    prompts = prompts if prompts is not None else [""] * len(tasks)
     gold_sql = [t.gold_sql for t in tasks]
     db_id = [t.db_id for t in tasks]
     if hasattr(reward_fn, "details"):

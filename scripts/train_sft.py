@@ -59,6 +59,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lr", type=float, default=DEFAULTS.learning_rate)
     p.add_argument("--lora-r", type=int, default=DEFAULTS.lora_r, help="0 trains every weight")
     p.add_argument("--lora-alpha", type=int, default=DEFAULTS.lora_alpha)
+    p.add_argument("--max-schema-chars", type=int, default=DEFAULTS.max_schema_chars,
+                   help="schema text limit in characters; use the same value for SFT, pass rate, GRPO and evaluation")
     p.add_argument("--max-steps", type=int, default=None, help="stop after N optimizer steps")
     p.add_argument("--num-tasks", type=int, default=None, help="train on only N questions")
     p.add_argument("--val-size", type=int, default=200, help="questions held out for validation")
@@ -106,6 +108,7 @@ def main() -> int:
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         max_steps=args.max_steps,
+        max_schema_chars=args.max_schema_chars,
         eval_max_tasks=args.val_size,
         eval_before_training=not args.no_eval_before,
         eval_every_steps=args.eval_every,

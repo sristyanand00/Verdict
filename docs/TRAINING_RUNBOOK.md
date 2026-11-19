@@ -181,9 +181,19 @@ Expected: 9428, 69, 1534. The zip files can be deleted afterwards to save space.
 
 ## 6. Code changes needed before the big runs
 
-Do these on the college PC (or on the laptop and push). Add a test for each,
-run `python -m pytest -q`, and keep the old behaviour as the default where
-Kaggle still needs it.
+**Status 19 Nov: items 1 to 4 are done and pushed** (214 tests pass). After
+`git pull` on the college PC:
+
+- Precision is chosen automatically (`VERDICT_PRECISION=auto`): bf16 on the
+  3060, fp16 on a T4. Force it with `$env:VERDICT_PRECISION = "fp16"` or `"bf16"`.
+- `--max-schema-chars` exists in `train_sft.py`, `pass_rate.py`, `train_grpo.py`.
+- `evaluate.py` has `--timeout`, `--workers`, `--gen-batch`, and `--rescore`
+  (re-score a saved `eval_<label>.jsonl` with other settings, no GPU). Every
+  summary now has a 95% range and the settings used. Each row saves the raw
+  model text (first 1000 characters) for item 5.
+- `pass_rate.py` has `--gen-batch` (questions sampled together).
+
+Items 5 and 6 are still open. The original list:
 
 1. **bf16 option.** Today CUDA always uses float16 weights and float16
    autocast (needed on the T4). On the 3060 use bfloat16 when
@@ -244,7 +254,7 @@ Keep the PC awake: `powercfg /change standby-timeout-ac 0` and
 ### Step A. Base model, new settings (baseline)
 
 ```
-python scripts/evaluate.py --model Qwen/Qwen2.5-Coder-1.5B-Instruct --label base_v2 --max-schema-chars 12000 --timeout 30 --workers 4
+python scripts/evaluate.py --model Qwen/Qwen2.5-Coder-1.5B-Instruct --label base_v2 --max-schema-chars 12000 --timeout 30 --workers 4 --gen-batch 8
 ```
 
 This is the base number that every later model is compared with.
@@ -275,7 +285,7 @@ python scripts/train_sft.py --train-dir E:\bird\train_dir --checkpoint-dir E:\ve
 Then evaluate on BIRD dev:
 
 ```
-python scripts/evaluate.py --model E:\verdict_runs\sft_v2\best --label sft_v2 --max-schema-chars 12000 --timeout 30 --workers 4 --baseline E:\verdict_runs\eval\eval_base_v2.jsonl
+python scripts/evaluate.py --model E:\verdict_runs\sft_v2\best --label sft_v2 --max-schema-chars 12000 --timeout 30 --workers 4 --gen-batch 8 --baseline E:\verdict_runs\eval\eval_base_v2.jsonl
 ```
 
 Target: above 40%.
@@ -283,7 +293,7 @@ Target: above 40%.
 ### Step C. Pass rate (pick useful GRPO questions)
 
 ```
-python scripts/pass_rate.py --train-dir E:\bird\train_dir --model E:\verdict_runs\sft_v2\best --out E:\verdict_runs\pass_rate --max-schema-chars 12000 --time-limit-hours 11
+python scripts/pass_rate.py --train-dir E:\bird\train_dir --model E:\verdict_runs\sft_v2\best --out E:\verdict_runs\pass_rate --max-schema-chars 12000 --gen-batch 2 --time-limit-hours 11
 ```
 
 - 8 samples per question at temperature 0.9 (same as GRPO).
@@ -305,7 +315,7 @@ python scripts/train_grpo.py --train-dir E:\bird\train_dir --init-adapter E:\ver
 Then evaluate:
 
 ```
-python scripts/evaluate.py --model <grpo best folder> --label grpo_v1 --max-schema-chars 12000 --timeout 30 --workers 4 --baseline E:\verdict_runs\eval\eval_sft_v2.jsonl
+python scripts/evaluate.py --model <grpo best folder> --label grpo_v1 --max-schema-chars 12000 --timeout 30 --workers 4 --gen-batch 8 --baseline E:\verdict_runs\eval\eval_sft_v2.jsonl
 ```
 
 Expected gain over SFT v2: about 2 to 5 points. If it is smaller, report it
