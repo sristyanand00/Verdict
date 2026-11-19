@@ -53,6 +53,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--num-samples", type=int, default=8, help="answers per question (use GRPO's group size)")
     p.add_argument("--temperature", type=float, default=0.9, help="use GRPO's temperature")
     p.add_argument("--max-tokens", type=int, default=256)
+    p.add_argument("--max-schema-chars", type=int, default=6000,
+                   help="schema text limit in characters; use the same value for SFT, pass rate, GRPO and evaluation")
+    p.add_argument("--gen-batch", type=int, default=1,
+                   help="questions generated together (each with --num-samples answers); 2 suits a 12 GB GPU")
     p.add_argument("--num-tasks", type=int, default=None, help="measure only N questions (spread across databases)")
     p.add_argument("--val-size", type=int, default=200, help="must match SFT/GRPO, so held-out questions are skipped")
     p.add_argument("--split-seed", type=int, default=0)
@@ -87,7 +91,7 @@ def main() -> int:
     logger.info("%d questions to measure (%d already done), %d answers each", len(todo), len(done), args.num_samples)
 
     model, tokenizer = load_for_inference(args.model, args.device)
-    schemas = SchemaStore(db_root, args.train_dir / "schemas.json")
+    schemas = SchemaStore(db_root, args.train_dir / "schemas.json", max_chars=args.max_schema_chars)
     reward_fn = SQLRewardFunction(db_root)
     n = args.num_samples
     config = GenerationConfig(temperature=args.temperature, max_tokens=args.max_tokens)
@@ -97,7 +101,8 @@ def main() -> int:
     for i in range(0, len(todo), args.chunk):
         chunk = todo[i : i + args.chunk]
         prompts = [render_prompt(tokenizer, t, schemas(t.db_id)) for t in chunk]
-        rollouts = generate_ids(model, tokenizer, prompts, n_completions=n, config=config, amp=amp)
+        rollouts = generate_ids(model, tokenizer, prompts, n_completions=n, config=config, amp=amp,
+                                batch_size=args.gen_batch)
         scores = reward_fn(
             prompts=repeat_per_group(prompts, n),
             completions=[text for r in rollouts for text in r.texts],

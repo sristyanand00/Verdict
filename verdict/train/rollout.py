@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 import torch
 
 from verdict.train.grpo_utils import trim_completion
+from verdict.train.modeling import amp_dtype
 
 
 @dataclass
@@ -64,7 +65,7 @@ def eos_token_ids(model, tokenizer) -> set[int]:
 def _autocast(model, enabled: bool):
     device_type = next(model.parameters()).device.type
     if enabled and device_type == "cuda":
-        return torch.autocast("cuda", dtype=torch.float16)
+        return torch.autocast("cuda", dtype=amp_dtype())
     return nullcontext()
 
 
@@ -75,8 +76,13 @@ def generate_ids(
     n_completions: int = 4,
     config: GenerationConfig | None = None,
     amp: bool = True,
+    batch_size: int = 1,
 ) -> list[Rollout]:
     """Sample ``n_completions`` per prompt; return token ids and decoded text.
+
+    ``batch_size`` prompts are generated together (left-padded, shortest
+    prompts batched together to waste little padding). Results come back in
+    the order of ``prompts``. With 1, every prompt runs alone, as before.
 
     Prompts are never truncated. A truncated prompt silently loses its end,
     which is where the question is. Keep prompts short at the source instead
@@ -93,21 +99,35 @@ def generate_ids(
     eos = eos_token_ids(model, tokenizer)
     device = next(model.parameters()).device
 
+    batch_size = max(1, batch_size)
+    encoded = [tokenizer(p, add_special_tokens=False)["input_ids"] for p in prompts]
+    order = sorted(range(len(prompts)), key=lambda i: len(encoded[i])) if batch_size > 1 else list(range(len(prompts)))
+
     was_training = model.training
     model.eval()
-    rollouts = []
+    rollouts: list[Rollout | None] = [None] * len(prompts)
     try:
         with torch.no_grad(), _autocast(model, amp):
-            for prompt in prompts:
-                inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False).to(device)
-                prompt_len = inputs["input_ids"].shape[1]
-                output_ids = model.generate(**inputs, **gen_kwargs)
-                rollout = Rollout(prompt_ids=inputs["input_ids"][0].tolist())
-                for seq in output_ids:
-                    ids = trim_completion(seq[prompt_len:].tolist(), eos, pad_id)
-                    rollout.completion_ids.append(ids)
-                    rollout.texts.append(tokenizer.decode(ids, skip_special_tokens=True).strip())
-                rollouts.append(rollout)
+            for start in range(0, len(order), batch_size):
+                idx = order[start : start + batch_size]
+                width = max(len(encoded[i]) for i in idx)
+                input_ids = torch.full((len(idx), width), pad_id, dtype=torch.long)
+                attention = torch.zeros((len(idx), width), dtype=torch.long)
+                for row, i in enumerate(idx):
+                    ids = encoded[i]
+                    input_ids[row, width - len(ids):] = torch.tensor(ids, dtype=torch.long)
+                    attention[row, width - len(ids):] = 1
+                output_ids = model.generate(
+                    input_ids=input_ids.to(device), attention_mask=attention.to(device), **gen_kwargs
+                )
+                # generate returns n_completions rows per prompt, prompt by prompt.
+                for row, i in enumerate(idx):
+                    rollout = Rollout(prompt_ids=list(encoded[i]))
+                    for seq in output_ids[row * n_completions : (row + 1) * n_completions]:
+                        ids = trim_completion(seq[width:].tolist(), eos, pad_id)
+                        rollout.completion_ids.append(ids)
+                        rollout.texts.append(tokenizer.decode(ids, skip_special_tokens=True).strip())
+                    rollouts[i] = rollout
     finally:
         if was_training:
             model.train()

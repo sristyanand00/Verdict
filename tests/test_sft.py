@@ -113,3 +113,18 @@ def test_schema_comes_from_the_saved_file_when_the_database_is_missing(make_trai
     assert "big_table" in trainer.prompt_for(_task(1, db_id="big"))
     examples = trainer._examples([_task(1, db_id="big"), _task(2, db_id="nowhere")])
     assert [qid for qid, _, _ in examples] == [1]
+
+
+def test_precision_choice(monkeypatch):
+    from verdict.train.modeling import amp_dtype, needs_grad_scaler
+
+    monkeypatch.setenv("VERDICT_PRECISION", "bf16")
+    assert amp_dtype() == torch.bfloat16 and not needs_grad_scaler()
+    monkeypatch.setenv("VERDICT_PRECISION", "fp16")
+    assert amp_dtype() == torch.float16 and needs_grad_scaler()
+    monkeypatch.setenv("VERDICT_PRECISION", "auto")
+    if not torch.cuda.is_available():
+        assert amp_dtype() == torch.float16
+    monkeypatch.setenv("VERDICT_PRECISION", "fp32")
+    with pytest.raises(ValueError):
+        amp_dtype()

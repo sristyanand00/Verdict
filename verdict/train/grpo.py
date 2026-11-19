@@ -17,12 +17,14 @@ of the model in GPU memory, and Dr. GRPO / DAPO report it is not needed for
 verifiable-reward tasks at this scale.
 
 Precision: trained weights and optimizer state are float32; forward passes
-run in float16 autocast with a GradScaler. Kaggle's T4 and P100 have no
-bfloat16, and training float16 weights directly with AdamW produces NaNs (its
-epsilon, 1e-8, rounds to zero in float16).
+run in half-precision autocast (``modeling.amp_dtype``): bfloat16 on GPUs
+that support it (RTX 30xx and newer), float16 with a GradScaler otherwise.
+Kaggle's T4 and P100 have no native bfloat16, and training float16 weights
+directly with AdamW produces NaNs (its epsilon, 1e-8, rounds to zero in
+float16).
 
 LoRA: with ``lora_r > 0`` only small adapter matrices are trained and the
-frozen base weights are kept in float16 (see ``verdict.train.modeling``). This
+frozen base weights are kept in half precision (see ``verdict.train.modeling``). This
 is what fits a 1.5B model on a T4. ``init_adapter`` starts from an existing
 adapter, such as the result of supervised fine-tuning.
 """
@@ -46,6 +48,8 @@ from verdict.train.data_prep import SchemaStore, render_prompt
 from verdict.train.evaluation import evaluate_tasks
 from verdict.train.grpo_utils import group_advantages, repeat_per_group
 from verdict.train.modeling import (
+    amp_dtype,
+    needs_grad_scaler,
     LoraSettings,
     adapter_base_model,
     completion_token_logprobs,
@@ -85,7 +89,7 @@ class GRPOTrainingConfig:
     # Memory. micro_batch_size completions go through each forward/backward.
     micro_batch_size: int = 4
     gradient_checkpointing: bool = True
-    amp: bool = True  # float16 autocast on CUDA
+    amp: bool = True  # half-precision autocast on CUDA (bf16 or fp16, see amp_dtype)
 
     # Prompt. BIRD schemas can be very long; the schema is shortened (fewer
     # sample rows, then cut) to fit, rather than truncating the prompt, which
@@ -151,7 +155,7 @@ class GRPOTrainer:
         _log(f"Trainable parameters: {trainable:,} of {total:,} ({100 * trainable / total:.2f}%)")
 
         self.use_amp = config.amp and self.device.type == "cuda"
-        self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
+        self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp and needs_grad_scaler())
         self.optimizer = self._new_optimizer()
 
         self.reward_fn = SQLRewardFunction(
@@ -362,7 +366,7 @@ class GRPOTrainer:
         return rewards, loss
 
     def _autocast(self):
-        return torch.autocast("cuda", dtype=torch.float16) if self.use_amp else nullcontext()
+        return torch.autocast("cuda", dtype=amp_dtype()) if self.use_amp else nullcontext()
 
     def _accumulate_gradients(self, samples: list[tuple[list[int], list[int], float]]) -> float:
         """Backpropagate -advantage * log p(completion) over ``samples``.

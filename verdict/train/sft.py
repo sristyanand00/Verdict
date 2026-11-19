@@ -38,6 +38,8 @@ from verdict.data.loaders import BirdTask
 from verdict.train.data_prep import SchemaStore, render_prompt, sql_answer
 from verdict.train.evaluation import evaluate_tasks
 from verdict.train.modeling import (
+    amp_dtype,
+    needs_grad_scaler,
     LoraSettings,
     adapter_base_model,
     completion_token_logprobs,
@@ -123,7 +125,7 @@ class SFTTrainer:
         _log(f"Trainable parameters: {trainable:,} of {total:,} ({100 * trainable / total:.2f}%)")
 
         self.use_amp = config.amp and self.device.type == "cuda"
-        self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
+        self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp and needs_grad_scaler())
         self.optimizer = torch.optim.AdamW(
             trainable_parameters(self.model), lr=config.learning_rate, weight_decay=config.weight_decay
         )
@@ -188,7 +190,7 @@ class SFTTrainer:
     # ----------------------------------------------------------------- training
 
     def _autocast(self):
-        return torch.autocast("cuda", dtype=torch.float16) if self.use_amp else nullcontext()
+        return torch.autocast("cuda", dtype=amp_dtype()) if self.use_amp else nullcontext()
 
     def _schedule(self, total_steps: int):
         warmup = max(self.config.warmup_steps, 1)

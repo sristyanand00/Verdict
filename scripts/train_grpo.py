@@ -66,6 +66,8 @@ def parse_args() -> argparse.Namespace:
                    help="completions per forward/backward; lower it if you run out of GPU memory")
     p.add_argument("--eval-max-tasks", type=int, default=DEFAULTS.eval_max_tasks,
                    help="validation questions evaluated per epoch")
+    p.add_argument("--max-schema-chars", type=int, default=DEFAULTS.max_schema_chars,
+                   help="schema text limit in characters; use the same value for SFT, pass rate, GRPO and evaluation")
     p.add_argument("--checkpoint-dir", default="checkpoints")
     p.add_argument("--num-tasks", type=int, default=None, help="use only N tasks (sampled across databases)")
     p.add_argument("--seed", type=int, default=DEFAULTS.seed)
@@ -140,6 +142,7 @@ def main() -> int:
         learning_rate=lr,
         num_generations=args.num_generations,
         max_tokens=args.max_tokens,
+        max_schema_chars=args.max_schema_chars,
         temperature=args.temperature,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         micro_batch_size=args.micro_batch_size,
