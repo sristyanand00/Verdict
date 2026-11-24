@@ -25,3 +25,7 @@ notes/
 # Large dataset files
 BIRD_dataset.zip
 *.zip
+
+# App state written by the API server (asks, review queue, knowledge).
+# Leading slash: only the top-level folder, not the verdict/data package.
+/data/
