@@ -399,12 +399,12 @@ dashboard from these.
 
 | Step | Status | Date | Result |
 |---|---|---|---|
-| Setup on E: | not started | | |
-| BIRD data on E: | not started | | |
-| Code changes (section 6) | not started | | |
-| A. Base v2 eval | not started | | |
-| B. SFT v2 | not started | | |
-| B. SFT v2 eval | not started | | |
+| Setup on E: | done | 19 Nov | venv on E:, torch cu128, tests pass (openpyxl installed) |
+| BIRD data on E: | done | 19 Nov | 9428 train, 69 dbs, 1534 dev, 11 dbs; zips and __MACOSX removed |
+| Code changes (section 6) | items 1-4 done | 19 to 24 Nov | train_run: venv Python fix (5453f11), single Ctrl+C no longer stops a run (db673e9) |
+| A. Base v2 eval | done | 23 Nov | 24.6% (range 22.6-26.9), ran 54.9%, 47.6 min |
+| B. SFT v2 | done | 19 to 23 Nov | 1146/1146 steps, resumed at 500; validation 23.0% to 49.5% (79.0% ran) |
+| B. SFT v2 eval | running | 24 Nov | |
 | C. Pass rate | not started | | |
 | D. GRPO v1 | not started | | |
 | D. GRPO v1 eval | not started | | |
