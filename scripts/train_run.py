@@ -14,6 +14,10 @@ this script (the active venv). On Windows a bare ``python`` started from a
 venv is otherwise found next to the base interpreter, which lacks the
 project's packages.
 
+Ctrl+C: one press only prints a warning and the run keeps going (in a
+terminal, Ctrl+C without selected text is easy to press by accident while
+copying). Press it twice within 5 seconds to stop the run.
+
 The exit code is the command's exit code. Closing the window stops the run,
 so keep it open until the end line appears.
 """
@@ -26,6 +30,7 @@ from pathlib import Path
 
 
 PYTHON_NAMES = {"python", "python3", "python.exe", "python3.exe"}
+CONFIRM_SECONDS = 5.0
 
 
 def resolve_command(command: list[str]) -> list[str]:
@@ -33,6 +38,27 @@ def resolve_command(command: list[str]) -> list[str]:
     if command and command[0].lower() in PYTHON_NAMES:
         return [sys.executable, *command[1:]]
     return command
+
+
+class StopGuard:
+    """A single Ctrl+C only warns; a second one within ``window`` seconds means stop."""
+
+    def __init__(self, window: float = CONFIRM_SECONDS):
+        self.window = window
+        self.last: float | None = None
+
+    def press(self, now: float) -> bool:
+        if self.last is not None and now - self.last <= self.window:
+            return True
+        self.last = now
+        return False
+
+
+def child_options() -> dict:
+    """Start the child in its own process group so Ctrl+C reaches only this script."""
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
 
 
 def main() -> int:
@@ -46,27 +72,40 @@ def main() -> int:
     env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
     start = time.time()
     with open(log_path, "ab") as log:
-        header = f"\n=== start {time.strftime('%Y-%m-%d %H:%M:%S')}: {' '.join(command)}\n".encode()
-        log.write(header)
-        sys.stdout.buffer.write(header)
-        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
-        try:
-            while True:
+
+        def write(data: bytes) -> None:
+            sys.stdout.buffer.write(data)
+            sys.stdout.buffer.flush()
+            log.write(data)
+            log.flush()
+
+        write(f"\n=== start {time.strftime('%Y-%m-%d %H:%M:%S')}: {' '.join(command)}\n".encode())
+        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
+                                **child_options())
+        guard = StopGuard()
+        stopped = False
+        while True:
+            try:
                 chunk = proc.stdout.read1(4096) if hasattr(proc.stdout, "read1") else proc.stdout.read(1)
-                if not chunk:
-                    break
-                sys.stdout.buffer.write(chunk)
-                sys.stdout.buffer.flush()
-                log.write(chunk)
-                log.flush()
-        except KeyboardInterrupt:
-            proc.terminate()
+            except KeyboardInterrupt:
+                if stopped:
+                    continue
+                if guard.press(time.monotonic()):
+                    write(b"\n=== Ctrl+C pressed twice: stopping the run\n")
+                    proc.terminate()
+                    stopped = True
+                else:
+                    write(f"\n=== Ctrl+C pressed. The run keeps going. Press Ctrl+C again within "
+                          f"{CONFIRM_SECONDS:.0f} seconds to stop it.\n".encode())
+                continue
+            if not chunk:
+                break
+            write(chunk)
         code = proc.wait()
         minutes = (time.time() - start) / 60
-        footer = f"\n=== end {time.strftime('%Y-%m-%d %H:%M:%S')}: exit code {code}, {minutes:.1f} minutes\n".encode()
-        log.write(footer)
-        sys.stdout.buffer.write(footer)
-        sys.stdout.buffer.flush()
+        note = " (stopped with Ctrl+C)" if stopped else ""
+        write(f"\n=== end {time.strftime('%Y-%m-%d %H:%M:%S')}: exit code {code}, {minutes:.1f} minutes{note}\n"
+              .encode())
     return code
 
 

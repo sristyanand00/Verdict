@@ -26,3 +26,13 @@ def test_exit_code_and_log_lines(tmp_path):
     assert proc.returncode == 3
     text = log.read_text(encoding="utf-8")
     assert "=== start" in text and "hello" in text and "exit code 3" in text
+
+
+def test_one_ctrl_c_only_warns_two_quick_presses_stop():
+    sys.path.insert(0, str(SCRIPT.parent))
+    from train_run import StopGuard
+
+    guard = StopGuard(window=5)
+    assert guard.press(100.0) is False
+    assert guard.press(110.0) is False
+    assert guard.press(113.0) is True
