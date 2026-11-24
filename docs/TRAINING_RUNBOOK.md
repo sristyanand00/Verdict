@@ -383,15 +383,40 @@ Save the small summary files in `results/training/` in the repo (big `.jsonl`
 files stay on E: and in backup). The eval chat builds `results.json` for the
 dashboard from these.
 
-### Packaging for the laptop
+### Packaging for the laptop (moved up: needed for the 26 Nov demo)
 
-1. Merge the LoRA adapter into the base weights (`load_for_inference` already
-   merges; save with `save_pretrained`).
-2. Convert to GGUF with llama.cpp (`convert_hf_to_gguf.py`), quantise to
-   Q4_K_M and Q5_K_M.
-3. Ollama `Modelfile` with the same chat template and system prompt.
-4. On the laptop: check that answers match the Hugging Face model on 50 dev
-   questions, and measure seconds per answer.
+All of this runs on the CPU, so it can run while the GPU does pass rate or GRPO.
+Use a second PowerShell window, not the one running the GPU job.
+
+1. Merge the adapter and write the Ollama Modelfile (about 5 minutes):
+
+```
+cd E:\verdict
+python scripts/export_model.py --adapter E:\verdict_runs\sft_v2\best --out E:\verdict_runs\export\sft_v2
+```
+
+2. Get llama.cpp's converter (once) and convert to GGUF, 8-bit (about 1.6 GB):
+
+```
+git clone --depth 1 https://github.com/ggml-org/llama.cpp E:\llama.cpp
+pip install E:\llama.cpp\gguf-py
+cd E:\verdict
+python E:\llama.cpp\convert_hf_to_gguf.py E:\verdict_runs\export\sft_v2\merged --outfile E:\verdict_runs\export\sft_v2\verdict-qwen.gguf --outtype q8_0
+```
+
+3. Copy `verdict-qwen.gguf` and `Modelfile` from `E:\verdict_runs\export\sft_v2`
+   to one folder on the laptop (Google Drive or pen drive). There:
+
+```
+ollama create verdict-qwen -f Modelfile
+ollama run verdict-qwen "hello"
+```
+
+4. The app must send the training prompt (system instruction and the
+   "### Database Schema / ### Question / ### Hint" layout from
+   `verdict/train/data_prep.py`). Tell the Backend session.
+5. Later: check that Ollama answers match the Hugging Face model on 50 dev
+   questions, and measure seconds per answer on the laptop.
 
 ---
 
@@ -404,11 +429,11 @@ dashboard from these.
 | Code changes (section 6) | items 1-4 done | 19 to 24 Nov | train_run: venv Python fix (5453f11), single Ctrl+C no longer stops a run (db673e9) |
 | A. Base v2 eval | done | 23 Nov | 24.6% (range 22.6-26.9), ran 54.9%, 47.6 min |
 | B. SFT v2 | done | 19 to 23 Nov | 1146/1146 steps, resumed at 500; validation 23.0% to 49.5% (79.0% ran) |
-| B. SFT v2 eval | running | 24 Nov | |
+| B. SFT v2 eval | done | 24 Nov | 43.5% (range 41.0-46.0), ran 87.9%; simple 52.0, moderate 33.0, challenging 22.8; vs base +353 / -64, net +289; 38.4 min |
 | C. Pass rate | not started | | |
 | D. GRPO v1 | not started | | |
 | D. GRPO v1 eval | not started | | |
-| Version 1 handed over | not started | | |
+| Version 1 handed over | SFT v2 as Version 1 for now | 24 Nov | adapter zip E:\sft_v2_best.zip (206 MB); GGUF export for the demo |
 | Week 2 choice | not started | | |
 | Final comparison | not started | | |
 | Packaging | not started | | |
