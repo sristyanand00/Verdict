@@ -107,3 +107,117 @@ def decide(grouping: Grouping, thresholds: dict[str, float] | None = None) -> Tr
     else:
         why = f"Only {agree}; the attempts gave {len(grouping.groups)} different answers."
     return TrustDecision("red", score, None, why)
+
+
+# --------------------------------------------------------------------------
+# The product verdict: Trusted / Review / Reject.
+#
+# The agreement levels above (green / yellow / red / unanswerable) are what
+# calibration measures, and they stay as they are. The product adds the other
+# checks on top and speaks in three levels:
+#
+#   reject   the data cannot answer it, nothing ran, or agreement is too low
+#   review   two meanings, middling agreement, empty answer, conflict with an
+#            approved answer, or the second model disagrees
+#   trusted  agreement at the green level and no review condition
+#
+# Checked in this order (plan section 7): cannot answer, two meanings, reject,
+# review, trusted. "Two meanings" comes before low agreement on purpose: a
+# 4 / 4 split is not noise, it is a question read two ways, and the analyst
+# can pick one.
+# --------------------------------------------------------------------------
+
+Verdict = Literal["trusted", "review", "reject"]
+
+
+@dataclass(frozen=True)
+class Reason:
+    #: machine code the frontend can switch on:
+    #: not_in_data, two_meanings, failed, low_agreement, agreement, empty,
+    #: conflict, second_model, not_empty, no_conflict, ran
+    code: str
+    text: str
+
+
+@dataclass(frozen=True)
+class FinalVerdict:
+    level: Verdict
+    reasons: list[Reason]
+    #: the agreement-only level, kept for evaluation and old scripts
+    agreement_level: Level
+
+
+def needed_for_green(n: int, thresholds: dict[str, float]) -> int:
+    """How many of n attempts must agree for green, e.g. 6 of 8 at 0.75."""
+    import math
+
+    return math.ceil(thresholds["green"] * n - 1e-9)
+
+
+def final_verdict(
+    grouping: Grouping,
+    thresholds: dict[str, float] | None = None,
+    split: list[AnswerGroup] | None = None,
+    conflict: str | None = None,
+    second_model_agrees: bool | None = None,
+) -> FinalVerdict:
+    """Combine agreement with the extra checks into Trusted / Review / Reject.
+
+    ``split``: the two groups from ambiguity.find_split, or None.
+    ``conflict``: text of a conflict with an approved answer, or None.
+    ``second_model_agrees``: None when the second model is off or gave no answer.
+    """
+    t = thresholds or load_thresholds()
+    n = grouping.n_attempts
+    top = grouping.top
+    base = level_for(
+        n, grouping.n_cannot_answer, top.size if top else 0, bool(top and top.is_empty_answer), t
+    )
+
+    if n == 0:
+        return FinalVerdict("reject", [Reason("failed", "No attempts were made.")], base)
+    if base == "unanswerable":
+        return FinalVerdict("reject", [Reason(
+            "not_in_data",
+            f"{grouping.n_cannot_answer} of {n} attempts said this data cannot answer the question.",
+        )], base)
+    if split:
+        a, b = split
+        return FinalVerdict("review", [Reason(
+            "two_meanings",
+            f"The attempts split into two answers ({a.size} of {n} and {b.size} of {n}). "
+            "The question can be read two ways.",
+        )], base)
+    if top is None:
+        return FinalVerdict("reject", [Reason(
+            "failed", f"None of the {n} attempts produced a working query."
+        )], base)
+    if base == "red":
+        ran = n - grouping.n_failed - grouping.n_cannot_answer
+        if ran <= n // 2:
+            text = f"Only {ran} of {n} attempts produced a working query."
+            code = "failed"
+        else:
+            text = (f"Only {top.size} of {n} attempts agree; "
+                    f"the attempts gave {len(grouping.groups)} different answers.")
+            code = "low_agreement"
+        return FinalVerdict("reject", [Reason(code, text)], base)
+
+    need = needed_for_green(n, t)
+    review: list[Reason] = []
+    if top.size < need:
+        review.append(Reason("agreement", f"{top.size} of {n} attempts agree; trusted needs {need}."))
+    if top.is_empty_answer:
+        review.append(Reason("empty", "The answer is empty (no rows, or only NULL)."))
+    if conflict:
+        review.append(Reason("conflict", conflict))
+    if second_model_agrees is False:
+        review.append(Reason("second_model", "The second model gave a different answer."))
+    if review:
+        return FinalVerdict("review", review, base)
+
+    good = [Reason("agreement", f"{top.size} of {n} attempts agree.")]
+    good.append(Reason("not_empty", "The answer has values."))
+    if second_model_agrees:
+        good.append(Reason("second_model", "The second model gives the same answer."))
+    return FinalVerdict("trusted", good, base)

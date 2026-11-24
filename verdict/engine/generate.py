@@ -30,7 +30,7 @@ PROMPT_TEMPLATE = """You write SQLite queries that answer questions about a data
 Database tables:
 {schema}
 
-Question: {question}
+{knowledge}Question: {question}
 {hint}
 Rules:
 - Use only the tables and columns listed above.
@@ -57,12 +57,21 @@ class Attempt:
     raw: str = ""
 
 
-def build_prompt(schema: str, question: str, hint: str | None = None) -> str:
+def build_prompt(
+    schema: str, question: str, hint: str | None = None, knowledge: str | None = None
+) -> str:
     """``hint`` is extra knowledge for the question, like BIRD's "evidence"
-    field. The product does not pass one."""
+    field. The product does not pass one.
+
+    ``knowledge`` is the analyst's saved meanings and approved examples
+    (engine/knowledge.py). Without it the prompt is exactly the one used in
+    evaluation, so evaluation numbers and caches stay valid.
+    """
     hint_line = f"Hint: {hint.strip()}\n" if hint and hint.strip() else ""
+    knowledge_block = f"{knowledge.strip()}\n\n" if knowledge and knowledge.strip() else ""
     return PROMPT_TEMPLATE.format(
-        schema=schema, question=question.strip(), hint=hint_line, cannot=CANNOT_ANSWER
+        schema=schema, question=question.strip(), hint=hint_line, cannot=CANNOT_ANSWER,
+        knowledge=knowledge_block,
     )
 
 
@@ -84,8 +93,9 @@ def parse_reply(text: str) -> Attempt:
 
 
 def generate_attempts(
-    writer: SQLWriter, schema: str, question: str, n: int = 8, hint: str | None = None
+    writer: SQLWriter, schema: str, question: str, n: int = 8, hint: str | None = None,
+    knowledge: str | None = None,
 ) -> list[Attempt]:
     """Ask ``writer`` for ``n`` independent replies and parse each one."""
-    replies = writer.write(build_prompt(schema, question, hint), n)
+    replies = writer.write(build_prompt(schema, question, hint, knowledge), n)
     return [parse_reply(r) for r in replies]

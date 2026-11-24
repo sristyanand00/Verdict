@@ -5,8 +5,8 @@
 
 Everything else in the engine works with any object that has a
 ``write(prompt, n)`` method (the SQLWriter protocol). That is what lets Gemini
-be swapped for base Qwen or trained Qwen later without touching the rest of
-the engine: add a QwenWriter here and pass it in.
+be swapped for base Qwen or trained Qwen without touching the rest of the
+engine. Qwen is reached through OpenAICompatWriter (vLLM or Ollama).
 
 The writer only writes. It never decides whether an answer is right; the
 verifier and trust.py do that, whichever model wrote the SQL.
@@ -129,6 +129,100 @@ class GeminiWriter:
         if len(errors) > n // 2:
             raise LLMError(f"{len(errors)} of {n} Gemini calls failed; first error: {errors[0][:300]}")
         return [reply for reply, _ in results]
+
+
+class OpenAICompatWriter:
+    """Writes SQL with any server that speaks the OpenAI chat API.
+
+    One class covers both places Qwen runs:
+
+        vLLM on the college GPU   OpenAICompatWriter("http://gpu-pc:8000/v1", "verdict-qwen")
+        Ollama on the laptop      OpenAICompatWriter("http://localhost:11434/v1", "verdict-qwen")
+
+    The n attempts are n separate requests sent at the same time. vLLM batches
+    them on the GPU. Ollama ignores the API's ``n`` option, so one request per
+    attempt is the only way that works on both.
+
+    Uses only the standard library, so the laptop needs no extra package to
+    talk to Ollama.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        temperature: float = DEFAULT_TEMPERATURE,
+        max_tokens: int = 512,
+        timeout_s: float = 120.0,
+        max_parallel: int = 8,
+        system_prompt: str | None = None,
+        api_key: str | None = None,
+    ):
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.timeout_s = timeout_s
+        self.max_parallel = max_parallel
+        self.system_prompt = system_prompt
+        self.api_key = api_key
+
+    def _headers(self) -> dict[str, str]:
+        h = {"Content-Type": "application/json"}
+        if self.api_key:
+            h["Authorization"] = f"Bearer {self.api_key}"
+        return h
+
+    def _one(self, prompt: str) -> tuple[str, str | None]:
+        """Return (reply, error). Never raises."""
+        import urllib.error
+        import urllib.request
+
+        messages = [{"role": "user", "content": prompt}]
+        if self.system_prompt:
+            messages.insert(0, {"role": "system", "content": self.system_prompt})
+        body = json.dumps({
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/chat/completions", data=body, headers=self._headers(), method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return data["choices"][0]["message"]["content"] or "", None
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")[:300]
+            return "", f"HTTP {e.code}: {detail}"
+        except Exception as e:  # connection refused, timeout, bad JSON
+            return "", f"{type(e).__name__}: {e}"
+
+    def write(self, prompt: str, n: int) -> list[str]:
+        with ThreadPoolExecutor(max_workers=max(1, min(n, self.max_parallel))) as pool:
+            results = list(pool.map(lambda _: self._one(prompt), range(n)))
+
+        errors = [err for _, err in results if err]
+        # Same rule as GeminiWriter: if most calls failed, the problem is the
+        # server, not the question, so say so instead of returning a verdict.
+        if len(errors) > n // 2:
+            raise LLMError(
+                f"{len(errors)} of {n} calls to {self.base_url} failed; first error: {errors[0][:300]}"
+            )
+        return [reply for reply, _ in results]
+
+    def reachable(self, timeout_s: float = 2.0) -> bool:
+        """True if the server answers GET /models. Used by /api/health."""
+        import urllib.request
+
+        req = urllib.request.Request(f"{self.base_url}/models", headers=self._headers())
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+                return 200 <= resp.status < 300
+        except Exception:
+            return False
 
 
 class FixedWriter:
