@@ -307,7 +307,11 @@ python scripts/pass_rate.py --train-dir E:\bird\train_dir --model E:\verdict_run
 
 - 8 samples per question at temperature 0.9 (same as GRPO).
 - Writes `kept_ids.json`: questions solved sometimes but not always.
-- Resumable with `--resume`.
+- Resumable with `--resume`. Use the same `--num-tasks`, so the same questions are picked.
+- 24 Nov: the first run (`--num-tasks 2000 --gen-batch 2`) stopped after 48 questions with
+  "CUDA out of memory" on one very long prompt. Fixed: generation now retries in smaller
+  pieces when memory runs out. Continue with `--resume`; the 48 done are kept.
+- Speed seen: about 30 s per question, so 9 hours gives about 1,000 questions.
 
 ### Step D. GRPO from SFT v2
 

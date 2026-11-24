@@ -83,6 +83,7 @@ def generate_ids(
     ``batch_size`` prompts are generated together (left-padded, shortest
     prompts batched together to waste little padding). Results come back in
     the order of ``prompts``. With 1, every prompt runs alone, as before.
+    If the GPU runs out of memory, the batch is retried in smaller pieces.
 
     Prompts are never truncated. A truncated prompt silently loses its end,
     which is where the question is. Keep prompts short at the source instead
@@ -103,6 +104,27 @@ def generate_ids(
     encoded = [tokenizer(p, add_special_tokens=False)["input_ids"] for p in prompts]
     order = sorted(range(len(prompts)), key=lambda i: len(encoded[i])) if batch_size > 1 else list(range(len(prompts)))
 
+    def run(idx: list[int], n: int) -> dict[int, list[list[int]]]:
+        """Sample ``n`` completions for each prompt in ``idx``; return trimmed ids per prompt.
+
+        If the GPU runs out of memory, free it and retry in halves: first
+        fewer prompts at once, then (for one long prompt) fewer completions
+        at once. Samples are independent, so splitting does not change what
+        is being measured.
+        """
+        try:
+            return _generate_batch(model, encoded, idx, n, gen_kwargs, pad_id, eos, device)
+        except torch.OutOfMemoryError:
+            if len(idx) == 1 and n == 1:
+                raise
+            torch.cuda.empty_cache()
+        if len(idx) > 1:
+            half = len(idx) // 2
+            return {**run(idx[:half], n), **run(idx[half:], n)}
+        first = run(idx, n - n // 2)
+        second = run(idx, n // 2)
+        return {idx[0]: first[idx[0]] + second[idx[0]]}
+
     was_training = model.training
     model.eval()
     rollouts: list[Rollout | None] = [None] * len(prompts)
@@ -110,21 +132,9 @@ def generate_ids(
         with torch.no_grad(), _autocast(model, amp):
             for start in range(0, len(order), batch_size):
                 idx = order[start : start + batch_size]
-                width = max(len(encoded[i]) for i in idx)
-                input_ids = torch.full((len(idx), width), pad_id, dtype=torch.long)
-                attention = torch.zeros((len(idx), width), dtype=torch.long)
-                for row, i in enumerate(idx):
-                    ids = encoded[i]
-                    input_ids[row, width - len(ids):] = torch.tensor(ids, dtype=torch.long)
-                    attention[row, width - len(ids):] = 1
-                output_ids = model.generate(
-                    input_ids=input_ids.to(device), attention_mask=attention.to(device), **gen_kwargs
-                )
-                # generate returns n_completions rows per prompt, prompt by prompt.
-                for row, i in enumerate(idx):
+                for i, completions in run(idx, n_completions).items():
                     rollout = Rollout(prompt_ids=list(encoded[i]))
-                    for seq in output_ids[row * n_completions : (row + 1) * n_completions]:
-                        ids = trim_completion(seq[width:].tolist(), eos, pad_id)
+                    for ids in completions:
                         rollout.completion_ids.append(ids)
                         rollout.texts.append(tokenizer.decode(ids, skip_special_tokens=True).strip())
                     rollouts[i] = rollout
@@ -132,6 +142,26 @@ def generate_ids(
         if was_training:
             model.train()
     return rollouts
+
+
+def _generate_batch(model, encoded, idx, n, gen_kwargs, pad_id, eos, device) -> dict[int, list[list[int]]]:
+    """One ``model.generate`` call for the prompts ``idx`` (left-padded), ``n`` completions each."""
+    width = max(len(encoded[i]) for i in idx)
+    input_ids = torch.full((len(idx), width), pad_id, dtype=torch.long)
+    attention = torch.zeros((len(idx), width), dtype=torch.long)
+    for row, i in enumerate(idx):
+        ids = encoded[i]
+        input_ids[row, width - len(ids):] = torch.tensor(ids, dtype=torch.long)
+        attention[row, width - len(ids):] = 1
+    output_ids = model.generate(
+        input_ids=input_ids.to(device), attention_mask=attention.to(device),
+        **{**gen_kwargs, "num_return_sequences": n},
+    )
+    # generate returns n rows per prompt, prompt by prompt.
+    return {
+        i: [trim_completion(seq[width:].tolist(), eos, pad_id) for seq in output_ids[row * n : (row + 1) * n]]
+        for row, i in enumerate(idx)
+    }
 
 
 def generate(

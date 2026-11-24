@@ -64,3 +64,27 @@ def test_score_texts_rescoring_saved_sql(tmp_path):
     assert result.outcomes[0] == OUTCOME["correct"]
     assert result.outcomes[2] == OUTCOME["failed"]
     assert [r["sql"] for r in result.rows(tasks)] == texts
+
+
+def test_out_of_memory_retries_in_smaller_pieces(model_and_tok, monkeypatch):
+    """A batch too big for the GPU is split (prompts, then completions) instead of crashing."""
+    import verdict.train.rollout as rollout_mod
+
+    model, tok = model_and_tok
+    real = rollout_mod._generate_batch
+    calls = []
+
+    def limited(model, encoded, idx, n, *rest):
+        calls.append(len(idx) * n)
+        if len(idx) * n > 2:
+            raise torch.OutOfMemoryError("fake")
+        return real(model, encoded, idx, n, *rest)
+
+    monkeypatch.setattr(rollout_mod, "_generate_batch", limited)
+    config = GenerationConfig(temperature=0.9, max_tokens=4)
+    rollouts = generate_ids(model, tok, PROMPTS, n_completions=4, config=config, amp=False, batch_size=2)
+    assert len(rollouts) == len(PROMPTS)
+    for prompt, r in zip(PROMPTS, rollouts):
+        assert r.prompt_ids == tok(prompt, add_special_tokens=False)["input_ids"]
+        assert len(r.completion_ids) == len(r.texts) == 4
+    assert max(c for c in calls if c <= 2) == 2
