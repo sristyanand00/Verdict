@@ -77,5 +77,12 @@ def execute_isolated(
     finally:
         if proc.is_alive():
             proc.kill()
-            proc.join(1.0)
-        proc.close()
+            # After kill the child always exits, so waiting without a limit is
+            # safe. A short wait could end first on a busy machine.
+            proc.join()
+        try:
+            proc.close()
+        except ValueError:
+            # Still shutting down; the OS reaps it. The result is already in
+            # hand, and this function promises never to raise.
+            pass

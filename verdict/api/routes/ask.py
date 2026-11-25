@@ -39,6 +39,8 @@ def perform_ask(s, user: dict, question: str, database_id: str | None, model_id:
     model = s.model(model_id or settings["model"])
     if model is None:
         raise HTTPException(400, f"Unknown model: {model_id}")
+    if not question or not question.strip():
+        raise HTTPException(400, "The question is empty.")
 
     price = s.price_ask
     if not s.reserve_credits(user["id"], price):
@@ -66,9 +68,8 @@ def perform_ask(s, user: dict, question: str, database_id: str | None, model_id:
             )
         except LLMError as e:
             raise HTTPException(503, f"The model is not reachable: {e}") from None
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from None
         except Exception:
+            # Any other failure is the server's, not the question's.
             log.exception("ask failed")
             raise HTTPException(500, "Something went wrong on the server. You were not charged.") from None
         latency_ms = int((time.perf_counter() - start) * 1000)
