@@ -102,9 +102,32 @@ def test_checks_for_a_trusted_answer():
     c = by_key(build_checks(grouping(grp(1, 7), grp(2, 1)), T, None, None, 0, ("off", "Off.")))
     assert [k for k in c] == ["safe", "ran", "agreement", "not_empty", "no_split",
                               "known_numbers", "second_model"]
-    assert all(c[k].status == "pass" for k in list(c)[:-1])
+    # Only real evidence is a tick: safe and no_split are information here,
+    # and nothing was compared with approved answers.
+    assert {k for k in c if c[k].status == "pass"} == {"ran", "agreement", "not_empty"}
+    assert c["safe"].status == "info" and c["no_split"].status == "info"
+    assert c["known_numbers"].status == "off"
     assert c["second_model"].status == "off"
     assert c["agreement"].detail.startswith("7 of 8")
+
+
+def test_safe_is_never_a_tick():
+    for g in (grouping(grp(1, 8)), grouping(cannot=8), grouping(grp(1, 2), grp(2, 2))):
+        assert by_key(build_checks(g, T, None, None, 0, ("off", "Off.")))["safe"].status == "info"
+
+
+def test_no_split_is_a_tick_only_when_agreement_failed():
+    # 3 + 2 + 2 + 1: low agreement, but not two meanings. That is worth saying.
+    g = grouping(grp(1, 3), grp(2, 2), grp(3, 2), grp(4, 1))
+    c = by_key(build_checks(g, T, None, None, 0, ("off", "Off.")))
+    assert c["agreement"].status == "fail" and c["no_split"].status == "pass"
+
+
+def test_matches_approved_passes_only_after_a_comparison():
+    g = grouping(grp(1, 8))
+    assert by_key(build_checks(g, T, None, None, 0, ("off", "Off.")))["known_numbers"].status == "off"
+    c = by_key(build_checks(g, T, None, None, 2, ("off", "Off.")))["known_numbers"]
+    assert c.status == "pass" and c.detail.startswith("Same as 2 approved answers")
 
 
 def test_checks_report_blocked_attempts():

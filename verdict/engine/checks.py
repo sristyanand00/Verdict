@@ -10,6 +10,15 @@ Statuses:
     pass   the check ran and found nothing wrong
     fail   the check ran and found a problem
     off    the check did not run, with the detail saying why
+    info   a fact worth showing that is not evidence about this answer
+
+The receipt must not show more evidence than exists. So:
+    safe           always "info": it describes the sandbox, which is the same
+                   for every question, not the answer
+    no_split       "info" when agreement already passed (a split is then
+                   impossible, so the row would only repeat agreement);
+                   "fail" on a split
+    known_numbers  "off" when no approved answer was compared
 """
 
 from __future__ import annotations
@@ -20,7 +29,7 @@ from typing import Literal
 from verdict.engine.group import AnswerGroup, Grouping
 from verdict.engine.trust import needed_for_green
 
-Status = Literal["pass", "fail", "off"]
+Status = Literal["pass", "fail", "off", "info"]
 
 
 @dataclass(frozen=True)
@@ -52,12 +61,13 @@ def build_checks(
     checks: list[Check] = []
 
     # Safe: every query went through the read-only verifier. Blocked queries
-    # were refused and never touched the data.
+    # were refused and never touched the data. This is true of every answer,
+    # so it is shown as information, never as a tick.
     if blocked:
-        detail = f"Read-only. {blocked} attempt{'s' if blocked > 1 else ''} blocked as unsafe and not run."
+        detail = f"Read-only sandbox. {blocked} attempt{'s' if blocked > 1 else ''} blocked as unsafe and not run."
     else:
-        detail = "Read-only, nothing blocked."
-    checks.append(Check("safe", "Safe", "pass", detail))
+        detail = "Read-only sandbox, nothing blocked."
+    checks.append(Check("safe", "Safe", "info", detail))
 
     # Ran
     if n_sql == 0:
@@ -68,10 +78,11 @@ def build_checks(
 
     # Agreement
     need = needed_for_green(n, thresholds) if n else 0
+    agreement_passed = top is not None and top.size >= need
     if top is None:
         checks.append(Check("agreement", "Agreement", "fail", "No two attempts gave a usable answer."))
     else:
-        status = "pass" if top.size >= need else "fail"
+        status = "pass" if agreement_passed else "fail"
         checks.append(Check(
             "agreement", "Agreement", status, f"{top.size} of {n} give the same answer (trusted needs {need})."
         ))
@@ -93,6 +104,10 @@ def build_checks(
         ))
     elif top is None:
         checks.append(Check("no_split", "No split", "off", "There is no answer to check."))
+    elif agreement_passed:
+        # With enough agreement for trusted a split cannot happen, so a tick
+        # here would count the agreement evidence twice.
+        checks.append(Check("no_split", "No split", "info", "Follows from agreement; not separate evidence."))
     else:
         checks.append(Check("no_split", "No split", "pass", "Attempts did not split into two meanings."))
 
@@ -108,8 +123,8 @@ def build_checks(
         ))
     else:
         checks.append(Check(
-            "known_numbers", "Matches approved answers", "pass",
-            "No approved answer to a near-identical question to conflict with.",
+            "known_numbers", "Matches approved answers", "off",
+            "No approved answer to a near-identical question yet, so nothing was compared.",
         ))
 
     status, detail = second_model
