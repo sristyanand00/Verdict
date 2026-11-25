@@ -4,8 +4,9 @@
 knows when it is wrong.**
 
 > **Status: in development.** The execution verifier, reward function and GRPO training loop
-> are implemented and tested. Training runs on a single 16 GB GPU (Kaggle T4); see
-> [KAGGLE_QUICK_START.md](KAGGLE_QUICK_START.md). No published results yet.
+> are implemented and tested. Training runs on the college GPU PC; see
+> [docs/TRAINING_RUNBOOK.md](docs/TRAINING_RUNBOOK.md) and
+> [docs/TRAINING_STATUS_FOR_BOOK.md](docs/TRAINING_STATUS_FOR_BOOK.md).
 > See [Project status](#project-status).
 
 ## Problem
@@ -41,9 +42,9 @@ These are the deliverables the project is being built toward. The first two are 
 ## Intended architecture
 
 React + Tailwind → FastAPI → verification sandbox (SQLite, isolated processes) →
-GRPO trainer (Unsloth + vLLM) → experiment store → `results.json` artifact.
+SFT and GRPO trainers (hand-written loops on transformers and PEFT) → experiment store → `results.json` artifact.
 
-**Tech stack:** Python, FastAPI, React, Tailwind CSS, Unsloth/TRL, vLLM, Pandas, SQLite.
+**Tech stack:** Python, FastAPI, React, Tailwind CSS, PyTorch, transformers, PEFT, Ollama or vLLM for serving, Pandas, SQLite.
 
 ## Project status
 
@@ -57,11 +58,10 @@ GRPO trainer (Unsloth + vLLM) → experiment store → `results.json` artifact.
 | GRPO training loop (`verdict/train/grpo.py`, `scripts/train_grpo.py`) | Done, tested on a tiny model; first GPU runs in progress |
 | `eval`, `audit`, `data`, `api` | In progress |
 | `frontend/` screens | Stubs |
-| `docs/01` to `docs/25` | Placeholders |
 | Experimental results | Not started |
 
-The build log is in [`LOG.md`](LOG.md). Layout decisions, including the conflicts that were
-resolved to produce this structure, are recorded in [`STRUCTURE.md`](STRUCTURE.md).
+The build log is in [`LOG.md`](LOG.md). The product plan is in
+[`docs/VERDICT-FINAL-PLAN.md`](docs/VERDICT-FINAL-PLAN.md).
 
 ## Repository layout
 
@@ -127,13 +127,9 @@ and require a GPU. Reproducing training will require a single GPU and a configur
 
 ## Results
 
-Results will be reported in `docs/24-technical-report.md`, with every number traceable to a
-run id, configuration and seed. **Negative and surprising results will be reported alongside
-positive ones.** That document is currently a placeholder.
-
-## Contributing
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Training results so far are in [`docs/TRAINING_STATUS_FOR_BOOK.md`](docs/TRAINING_STATUS_FOR_BOOK.md),
+with every number traceable to a run. **Negative and surprising results are reported alongside
+positive ones.**
 
 ## Licence
 
