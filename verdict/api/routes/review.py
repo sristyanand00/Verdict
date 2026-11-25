@@ -16,7 +16,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+from verdict.api.auth import current_user, is_admin
 
 from verdict.api.deps import get_database, run_sql, state
 from verdict.api.present import json_rows, result_json
@@ -60,16 +62,17 @@ def _item_view(s, item: dict) -> dict:
 @router.get("/review")
 def list_items(
     request: Request, status: str | None = "open", level: str | None = None,
-    database_id: str | None = None,
+    database_id: str | None = None, user: dict = Depends(current_user),
 ) -> dict:
     s = state(request)
-    items = s.store.list_review_items(status or None, level, database_id)
+    owner = None if is_admin(user) else user["id"]
+    items = s.store.list_review_items(status or None, level, database_id, owner)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    by_level = s.store.count_asks_since(today)
+    by_level = s.store.count_asks_since(today, owner)
     asked = sum(by_level.values())
     return {
         "items": [_summary(i) for i in items],
-        "open_counts": s.store.review_counts(),     # {"review": 4, "reject": 3}
+        "open_counts": s.store.review_counts(owner),     # {"review": 4, "reject": 3}
         "today": {
             "asked": asked,
             "trusted": by_level.get("trusted", 0),
@@ -79,17 +82,18 @@ def list_items(
     }
 
 
-def _item_or_404(s, item_id: str) -> dict:
+def _item_or_404(s, item_id: str, user: dict) -> dict:
+    """The item, if it belongs to ``user`` (or ``user`` is the provider). 404 otherwise."""
     item = s.store.get_review_item(item_id)
-    if item is None:
+    if item is None or (not is_admin(user) and item.get("user_id") != user["id"]):
         raise HTTPException(404, f"Unknown review item: {item_id}")
     return item
 
 
 @router.get("/review/{item_id}")
-def get_item(item_id: str, request: Request) -> dict:
+def get_item(item_id: str, request: Request, user: dict = Depends(current_user)) -> dict:
     s = state(request)
-    return _item_view(s, _item_or_404(s, item_id))
+    return _item_view(s, _item_or_404(s, item_id, user))
 
 
 def approve_with_sql(
@@ -111,13 +115,16 @@ def approve_with_sql(
     if meaning is not None:
         s.store.add_meaning(db.id, meaning.term, meaning.definition, meaning.sql_hint)
     updated = s.store.resolve_review_item(item["id"], status, sql, cols, rows, note)
+    s.store.add_event(ask["ask_id"], "analyst", status, note)
     return _item_view(s, updated)
 
 
 @router.post("/review/{item_id}/resolve")
-def resolve(item_id: str, body: ResolveRequest, request: Request) -> dict:
+def resolve(
+    item_id: str, body: ResolveRequest, request: Request, user: dict = Depends(current_user)
+) -> dict:
     s = state(request)
-    item = _item_or_404(s, item_id)
+    item = _item_or_404(s, item_id, user)
     ask = s.store.get_ask(item["ask_id"])
 
     if body.action == "reject":
@@ -127,6 +134,7 @@ def resolve(item_id: str, body: ResolveRequest, request: Request) -> dict:
             s.store.add_meaning(ask["database_id"], body.save_meaning.term,
                                 body.save_meaning.definition, body.save_meaning.sql_hint)
         updated = s.store.resolve_review_item(item_id, "rejected", None, None, None, body.note)
+        s.store.add_event(item["ask_id"], "analyst", "rejected", body.note)
         return _item_view(s, updated)
 
     if body.action == "fix":

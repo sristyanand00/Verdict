@@ -15,6 +15,22 @@ How Verdict runs in each of its three setups. The same code runs in all of them.
 | `VERDICT_APP_DB` | Location of the app's own database (asks, review queue, knowledge) | `data/app.db` |
 | `VERDICT_CORS_ORIGINS` | Website addresses allowed to call the API, comma-separated | `http://localhost:5173,http://127.0.0.1:5173` |
 | `VERDICT_DATA_ROOT`, `VERDICT_RESULTS_ROOT`, `VERDICT_UPLOADS_ROOT` | Where BIRD, results files and uploads live | `datasets/`, `results/`, `uploads/` |
+| `VERDICT_ADMIN_EMAIL`, `VERDICT_ADMIN_PASSWORD` | The provider (admin) account. Made on server start if no account has that email. Without both, no admin is made; there is no default password. Changing the password here later does not change an existing account. | not set |
+| `VERDICT_SIGNUP_CREDITS` | Starting credits for a new account. Set 0 to hand out every credit yourself. | `20` |
+| `VERDICT_PRICE_ASK` | Credits for one question (flat, however many attempts) | `1` |
+| `VERDICT_PRICE_ARENA_OUTSIDE_MODEL` | Credits per outside model in a live Arena run | `1` |
+| `VERDICT_AUTH_RATE` | Login and signup tries per minute from one address | `10` |
+| `VERDICT_TRUST_PROXY` | Set to `1` behind Cloudflare Tunnel, so the rate limit sees each visitor's address (`CF-Connecting-IP`) instead of the tunnel's. Leave unset when the server is reached directly. | not set |
+
+Put these in a `.env` file or the shell, never in code or in git. For example, on the laptop (PowerShell):
+
+```
+$env:VERDICT_ADMIN_EMAIL = "you@example.com"
+$env:VERDICT_ADMIN_PASSWORD = "<a long password>"
+uvicorn verdict.api.main:app --port 8000
+```
+
+Run the server as one process (no `--workers`): the login rate limit and the credit hold for running asks live in that process.
 
 Example `VERDICT_MODELS_FILE`, with vLLM serving three versions of Qwen:
 
@@ -52,7 +68,7 @@ pip install -e ".[app,dev]"
 The college computer is not needed on demo day. It is only needed before that, for training and the full evaluation.
 
 1. **Model**:
-   - The Training chat merges the LoRA weights, converts the model to a GGUF file (Q4 or Q5, about 1 GB) and writes an Ollama `Modelfile`.
+   - The Training chat merges the LoRA weights, converts the model to a GGUF file (8-bit q8_0, about 1.6 GB; see docs/TRAINING_RUNBOOK.md) and writes an Ollama `Modelfile`.
    - On the laptop: `ollama create verdict-qwen -f Modelfile`, then `ollama serve`.
    - The default `VERDICT_QWEN_URL` already points at Ollama.
 2. **One server for everything**:

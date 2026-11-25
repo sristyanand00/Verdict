@@ -57,9 +57,24 @@ def env(tmp_path):
         thresholds=T,
         writer_factory=writers,
         reachable=lambda m: True,
+        signup_credits=1000,
+        admin_email="admin@test.local",
+        admin_password="admin-password-1",
+        auth_rate_per_minute=0,
     )
     client = TestClient(create_app(state, frontend_dist=None))
+    login_as(client, signup(client, "ana@test.local"))
     return client, writers, state
+
+
+def signup(client, email, password="password-123", name="Ana"):
+    r = client.post("/api/auth/signup", json={"name": name, "email": email, "password": password})
+    assert r.status_code == 200, r.text
+    return r.json()["token"]
+
+
+def login_as(client, token):
+    client.headers["Authorization"] = f"Bearer {token}"
 
 
 def ask(client, q, **kw):
@@ -275,7 +290,7 @@ def test_settings(env):
     assert s["second_model"] is True
     assert client.put("/api/settings", json={"model": "nope"}).status_code == 404
     models = client.get("/api/models").json()
-    assert models == [{"id": "fixed", "label": "Fixed replies", "kind": "fixed",
+    assert models == [{"id": "fixed", "label": "Fixed replies", "kind": "own", "provider": "fixed",
                        "private": True, "reachable": True}]
 
 
@@ -321,3 +336,28 @@ def test_serves_built_frontend(tmp_path):
     assert client.get("/review/r_1").text == "<html>verdict</html>"   # frontend route
     assert client.get("/assets/app.js").text == "console.log(1)"
     assert client.get("/api/nothing").status_code == 404
+
+
+def test_arena_scoreboard_never_fills_numbers(env):
+    client, _, state = env
+    assert client.get("/api/arena/models").json() == []
+    state.results_dir.mkdir(exist_ok=True)
+    (state.results_dir / "results.json").write_text(json.dumps({"arena_models": [
+        {"model_id": "qwen-base", "label": "Qwen2.5-Coder-1.5B base", "kind": "own",
+         "benchmark": "BIRD dev", "n_questions": 1534, "accuracy": 0.246, "measured_at": "2026-11-20"},
+        {"model_id": "qwen-sft", "label": "Qwen SFT v2", "kind": "own"},
+    ]}), encoding="utf-8")
+    rows = client.get("/api/arena/models").json()
+    assert rows[0]["accuracy"] == 0.246 and rows[0]["n_questions"] == 1534
+    assert rows[1]["accuracy"] is None and rows[1]["measured_at"] is None
+    # "models" is not read as a cached question key.
+    assert client.get("/api/arena").json() == []
+
+
+def test_ask_has_lineage_only_when_an_answer_is_shown(env):
+    client, w, _ = env
+    w.replies = [block("SELECT COUNT(*) FROM students")] * 8
+    lin = ask(client, "How many students?")["lineage"]
+    assert lin["tables"] == ["students"] and lin["formula"] == "COUNT(*)"
+    w.replies = [block("SELECT 1"), block("SELECT 2"), block("SELECT 3")]
+    assert ask(client, "anything?")["lineage"] is None

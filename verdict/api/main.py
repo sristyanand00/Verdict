@@ -15,11 +15,13 @@ import json
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from verdict.api.routes import ask, data, knowledge, models, results, review
+from verdict.api.auth import RateLimiter, current_user
+from verdict.api.routes import accounts, ask, data, knowledge, models, results, review, saved
+from verdict.api.routes.accounts import ensure_admin
 from verdict.api.routes.models import models_json
 from verdict.api.state import AppState
 from verdict.config import REPO_ROOT
@@ -32,14 +34,20 @@ FRONTEND_DIST = REPO_ROOT / "frontend" / "dist"
 def create_app(app_state: AppState | None = None, frontend_dist: Path | None = FRONTEND_DIST) -> FastAPI:
     app = FastAPI(title="Verdict API", version="0.1.0")
     app.state.verdict = app_state or AppState.from_env()
+    app.state.auth_limiter = RateLimiter(app.state.verdict.auth_rate_per_minute)
+    ensure_admin(app.state.verdict)
 
     origins = [o.strip() for o in os.environ.get("VERDICT_CORS_ORIGINS", DEFAULT_CORS).split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware, allow_origins=origins, allow_methods=["*"], allow_headers=["*"],
     )
 
-    for r in (ask, review, knowledge, data, models, results):
-        app.include_router(r.router, prefix="/api")
+    # Login, signup and the account pages check the login themselves. Every
+    # other /api route needs a logged-in, active account. /api/health and the
+    # website files are open.
+    app.include_router(accounts.router, prefix="/api")
+    for r in (ask, review, knowledge, data, models, results, saved):
+        app.include_router(r.router, prefix="/api", dependencies=[Depends(current_user)])
 
     @app.get("/api/health")
     def health(request: Request) -> dict:

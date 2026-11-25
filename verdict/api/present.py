@@ -6,6 +6,7 @@ import base64
 import math
 
 from verdict.engine.ask import Answer
+from verdict.engine.lineage import lineage
 from verdict.verifier.types import ExecutionResult
 
 #: Rows sent in one response. The verifier keeps up to 10,000; a table that
@@ -120,6 +121,7 @@ def ask_response(
         "missing": a.missing,
         "tables_available": a.tables if not_in_data else None,
         "knowledge_used": a.knowledge_used,
+        "lineage": lineage(a.sql) if a.sql else None,
         "tested_trust": tested_trust,
         "agreement_level": a.level,
         "model": model_id,

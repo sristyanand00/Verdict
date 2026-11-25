@@ -25,6 +25,24 @@ def results(request: Request) -> dict:
     return data
 
 
+#: Fields of one scoreboard row. A field missing from results.json is null
+#: ("not measured yet"); the server never fills in a number.
+ARENA_MODEL_FIELDS = ("model_id", "label", "kind", "benchmark", "n_questions", "accuracy", "measured_at")
+
+
+@router.get("/arena/models")
+def arena_models(request: Request) -> list[dict]:
+    """One scoreboard row per model, from results.json "arena_models".
+
+    An empty list until the Evaluation chat writes that list.
+    """
+    data = state(request).results_file("results.json") or {}
+    rows = data.get("arena_models") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return []
+    return [{k: r.get(k) for k in ARENA_MODEL_FIELDS} for r in rows if isinstance(r, dict)]
+
+
 @router.get("/arena")
 def arena_keys(request: Request) -> list[str]:
     data = state(request).results_file("arena.json") or {}

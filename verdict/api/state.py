@@ -11,6 +11,16 @@ from environment variables, so the same code runs everywhere:
     VERDICT_ATTEMPTS        attempts per question (default 8)
     VERDICT_CORS_ORIGINS    comma-separated website addresses allowed to call the API
     GEMINI_API_KEY          only if Gemini is used
+
+Accounts and credits:
+
+    VERDICT_ADMIN_EMAIL, VERDICT_ADMIN_PASSWORD
+                            the provider account, created on startup if missing
+    VERDICT_SIGNUP_CREDITS  starting credits for a new account (default 20)
+    VERDICT_PRICE_ASK       credits for one question (default 1)
+    VERDICT_PRICE_ARENA_OUTSIDE_MODEL
+                            credits per outside model in a live Arena run (default 1)
+    VERDICT_AUTH_RATE       login and signup tries per minute per IP (default 10)
 """
 
 from __future__ import annotations
@@ -18,6 +28,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,6 +40,10 @@ from verdict.store.db import Store
 from verdict.verifier.safety import read_only_uri
 
 DEFAULT_ATTEMPTS = 8
+DEFAULT_SIGNUP_CREDITS = 20
+DEFAULT_PRICE_ASK = 1
+DEFAULT_PRICE_ARENA = 1
+DEFAULT_AUTH_RATE = 10
 
 
 # -- databases ---------------------------------------------------------------
@@ -81,6 +96,9 @@ class ModelEntry:
     base_url: str = ""
     model: str = ""
     replies: tuple[str, ...] = ()   # only for kind "fixed"
+    #: True for the user's own model (Qwen, any version). False for outside
+    #: models (Gemini and the like), which are only for the Model Arena.
+    own: bool = True
 
 
 def default_models() -> list[ModelEntry]:
@@ -92,7 +110,7 @@ def default_models() -> list[ModelEntry]:
         ),
         ModelEntry(
             "gemini", "Gemini (cloud)", "gemini", False,
-            model=os.environ.get("GEMINI_MODEL", ""),
+            model=os.environ.get("GEMINI_MODEL", ""), own=False,
         ),
     ]
 
@@ -100,7 +118,9 @@ def default_models() -> list[ModelEntry]:
 def load_models() -> list[ModelEntry]:
     """Models from VERDICT_MODELS_FILE if set, else the two defaults.
 
-    File format: a JSON list of {"id", "label", "kind", "private", "base_url", "model"}.
+    File format: a JSON list of {"id", "label", "kind", "private", "base_url", "model", "own"}.
+    "own" defaults to true for kind "openai" (vLLM or Ollama serving Qwen) and
+    false for kind "gemini".
     """
     path = os.environ.get("VERDICT_MODELS_FILE")
     if not path:
@@ -110,6 +130,7 @@ def load_models() -> list[ModelEntry]:
         ModelEntry(
             m["id"], m.get("label", m["id"]), m["kind"], bool(m.get("private", m["kind"] != "gemini")),
             base_url=m.get("base_url", ""), model=m.get("model", ""),
+            own=bool(m.get("own", m["kind"] != "gemini")),
         )
         for m in raw
     ]
@@ -148,15 +169,71 @@ class AppState:
     thresholds: dict[str, float] | None = None   # None: read thresholds.json on every ask
     writer_factory: Callable[[ModelEntry], SQLWriter] = make_writer
     reachable: Callable[[ModelEntry], bool] = model_reachable
+    # accounts and credits
+    signup_credits: int = DEFAULT_SIGNUP_CREDITS
+    price_ask: int = DEFAULT_PRICE_ASK
+    price_arena_outside_model: int = DEFAULT_PRICE_ARENA
+    admin_email: str | None = None
+    admin_password: str | None = None
+    auth_rate_per_minute: int = DEFAULT_AUTH_RATE
+    # Credits held by asks that are still running, per user. See reserve_credits.
+    _reserved: dict[str, int] = field(default_factory=dict)
+    _reserve_lock: threading.Lock = field(default_factory=threading.Lock)
 
     @classmethod
     def from_env(cls) -> "AppState":
+        try:
+            from dotenv import load_dotenv
+
+            load_dotenv(REPO_ROOT / ".env")   # values already in the shell win
+        except ImportError:
+            pass
+        env = os.environ.get
         return cls(
             store=Store(),
             models=load_models(),
             preloaded=preloaded_databases(),
-            attempts=int(os.environ.get("VERDICT_ATTEMPTS", DEFAULT_ATTEMPTS)),
+            attempts=int(env("VERDICT_ATTEMPTS", DEFAULT_ATTEMPTS)),
+            signup_credits=int(env("VERDICT_SIGNUP_CREDITS", DEFAULT_SIGNUP_CREDITS)),
+            price_ask=int(env("VERDICT_PRICE_ASK", DEFAULT_PRICE_ASK)),
+            price_arena_outside_model=int(env("VERDICT_PRICE_ARENA_OUTSIDE_MODEL", DEFAULT_PRICE_ARENA)),
+            admin_email=env("VERDICT_ADMIN_EMAIL") or None,
+            admin_password=env("VERDICT_ADMIN_PASSWORD") or None,
+            auth_rate_per_minute=int(env("VERDICT_AUTH_RATE", DEFAULT_AUTH_RATE)),
         )
+
+    def prices(self) -> dict[str, int]:
+        return {"ask": self.price_ask, "arena_outside_model": self.price_arena_outside_model}
+
+    # credits held while an ask runs
+
+    def reserve_credits(self, user_id: str, amount: int) -> bool:
+        """Hold ``amount`` credits for a running ask. False if the balance is too low.
+
+        The charge itself happens when the ask is saved (Store.save_ask_and_charge,
+        which also refuses to go below 0). Holding the credits first means two
+        asks sent at the same time cannot both start on a balance that only
+        pays for one. The hold is in memory, which is right for the single
+        server process Verdict runs as.
+        """
+        if amount <= 0:
+            return True
+        with self._reserve_lock:
+            held = self._reserved.get(user_id, 0)
+            if self.store.balance(user_id) - held < amount:
+                return False
+            self._reserved[user_id] = held + amount
+            return True
+
+    def release_credits(self, user_id: str, amount: int) -> None:
+        if amount <= 0:
+            return
+        with self._reserve_lock:
+            left = self._reserved.get(user_id, 0) - amount
+            if left > 0:
+                self._reserved[user_id] = left
+            else:
+                self._reserved.pop(user_id, None)
 
     # databases
 

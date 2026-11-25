@@ -21,6 +21,8 @@ app = [
     "uvicorn>=0.29",
     "python-multipart>=0.0.9",
     "scikit-learn>=1.4",
+    # Password hashing for analyst and provider accounts.
+    "bcrypt>=4.1",
 ]
 train = [
     "torch>=2.0.0",

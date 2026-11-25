@@ -54,6 +54,33 @@ class NewMeaningRequest(MeaningIn):
     database_id: str
 
 
+class SignupRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    email: str = Field(min_length=3, max_length=200)
+    # The 8-character minimum is checked in the route, so the answer is a
+    # plain 400 with a readable message rather than a validation error.
+    password: str = Field(min_length=1, max_length=200)
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=1, max_length=200)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class CreditsRequest(BaseModel):
+    amount: int
+    note: str | None = Field(default=None, max_length=500)
+
+
+class ActiveRequest(BaseModel):
+    active: bool
+
+
+class SaveRequest(BaseModel):
+    ask_id: str
+    name: str = Field(min_length=1, max_length=200)
+
+
 class SettingsIn(BaseModel):
     database_id: str | None = None
     model: str | None = None

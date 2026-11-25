@@ -16,8 +16,11 @@ def models_json(s) -> list[dict]:
     # Reachability checks wait up to 2 s each; run them side by side.
     with ThreadPoolExecutor(max_workers=max(1, len(s.models))) as pool:
         reach = list(pool.map(s.reachable, s.models))
+    # kind: "own" for the user's model, "outside" for models used only in the
+    # Arena. provider: how the server reaches it ("openai" covers vLLM and Ollama).
     return [
-        {"id": m.id, "label": m.label, "kind": m.kind, "private": m.private, "reachable": ok}
+        {"id": m.id, "label": m.label, "kind": "own" if m.own else "outside", "provider": m.kind,
+         "private": m.private, "reachable": ok}
         for m, ok in zip(s.models, reach)
     ]
 
