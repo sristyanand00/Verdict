@@ -84,6 +84,7 @@ type AdminUserRow = User & { balance: number; used_total: number; asks_count: nu
 - A new account starts with `VERDICT_SIGNUP_CREDITS` (default 20), written as a `grant` row with the note "Starting credits".
 - Prices come from the server (`VERDICT_PRICE_ASK`, `VERDICT_PRICE_ARENA_OUTSIDE_MODEL`, both default 1).
 - What costs credits: `POST /api/ask` and `POST /api/saved/{id}/rerun` (each `prices.ask`, flat, however many attempts run). Review, approve, fix, reject, knowledge, saving and viewing cached Arena results are free.
+- The provider's (`admin`) own asks are free and write no ledger row.
 
 ## Provider panel (admin only, 403 for analysts)
 
@@ -92,6 +93,8 @@ type AdminUserRow = User & { balance: number; used_total: number; asks_count: nu
 | `GET /api/admin/users` | | `AdminUserRow[]`. `last_active_at` is the time of the newest `ask` or `arena` row, or `null`. |
 | `GET /api/admin/users/{id}/usage` | | That user's `LedgerEntry[]`, newest first |
 | `POST /api/admin/users/{id}/credits` | `{amount, note}` | The updated `AdminUserRow`. `amount` is a whole number, not 0: positive writes a `grant` row, negative a `remove` row. 400 if the balance would go below 0. 404 for an unknown user. |
+| `GET /api/admin/cache` | | Cached questions: `[{database_id, question, created_at}]`, newest first |
+| `DELETE /api/admin/cache?database_id=` | | `{ok: true, removed}`. Empties the answer cache, for one database or all. |
 | `POST /api/admin/users/{id}/active` | `{active}` | The updated `AdminUserRow`. Turning an account off also ends its logins. 400 if the provider turns off their own account. |
 
 ## `POST /api/ask`
@@ -146,6 +149,8 @@ Response:
   "model": "qwen",
   "model_label": "Qwen 1.5B (trained), private",
   "latency_ms": 3200,
+  "cache_hit": false,
+  "cached_at": null,
   "created_at": "2026-11-19T10:15:02+00:00",
   "review_id": null,
   "flagged": false,
@@ -173,6 +178,7 @@ Field notes:
 - `tested_trust`: `{precision, low, high, on}` from `results/results.json`. It is `null` until the Evaluation chat writes that file. Show nothing when it is `null`.
 - `lineage` (added 25 Nov): where the answer came from, read only from `sql`, with table aliases replaced by table names. `{output, formula, tables, columns, filters, period, group_by}`. `output` is the result's column names, `formula` the select expressions, `filters` the WHERE and HAVING conditions one by one, `period` the filters on date-like columns joined by "and" (or `null`). It is `null` when no answer is shown or the SQL cannot be read; hide the section then.
 - `agreement_level` is the older agreement-only level (`green`, `yellow`, `red` or `unanswerable`). It is kept for evaluation. The frontend can ignore it.
+- `cache_hit` and `cached_at` (added 26 Nov): a repeated question (same database, same words ignoring case and spacing, same model and attempts, and no change to that database's knowledge since) is answered from the cache. `cache_hit` is then `true` and `cached_at` is when the answer was first made; show it ("Answered from cache, first checked at ..."). It is still saved as the user's own ask, goes to the review queue if not trusted, and is charged like any answer. Any approval, fix, meaning or known number on that database makes the next ask run fresh.
 - `review_id`: anything that is not trusted is added to the review queue, and this is that item's id.
 
 ## Asks
@@ -224,7 +230,7 @@ Resolve body:
 | `GET /api/saved` | | `SavedItem[]`, newest first. The caller's own. |
 | `POST /api/saved` | `{ask_id, name}` | The new `SavedItem`. 404 if the ask is not the caller's. |
 | `DELETE /api/saved/{id}` | | `{ok: true}` |
-| `POST /api/saved/{id}/rerun` | | The `SavedItem` after asking the same question again. Costs `prices.ask` (402 if the balance is too low). |
+| `POST /api/saved/{id}/rerun` | | The `SavedItem` after asking the same question again, always fresh (never from the cache). Costs `prices.ask` (402 if the balance is too low). |
 
 ```ts
 type SavedItem = {

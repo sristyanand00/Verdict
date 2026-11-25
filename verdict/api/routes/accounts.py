@@ -146,6 +146,19 @@ def admin_active(
     return _row_or_404(s, user_id)
 
 
+@router.get("/admin/cache")
+def admin_cache(request: Request, _: dict = Depends(admin_user)) -> list[dict]:
+    """Questions whose answers are cached: [{database_id, question, created_at}]."""
+    return state(request).store.cache_list()
+
+
+@router.delete("/admin/cache")
+def admin_cache_clear(
+    request: Request, database_id: str | None = None, _: dict = Depends(admin_user)
+) -> dict:
+    return {"ok": True, "removed": state(request).store.cache_clear(database_id)}
+
+
 def ensure_admin(s) -> None:
     """Create the provider account from config if it does not exist yet.
 

@@ -55,5 +55,7 @@ def rerun(saved_id: str, request: Request, user: dict = Depends(current_user)) -
     _saved_or_404(s, saved_id, user)
     old = s.store.get_saved(saved_id)
     prev = s.store.get_ask(old["ask_id"]) or {}
-    resp = perform_ask(s, user, prev.get("question") or old["name"], prev.get("database_id"), prev.get("model"))
+    resp = perform_ask(
+        s, user, prev.get("question") or old["name"], prev.get("database_id"), prev.get("model"), fresh=True
+    )
     return s.store.update_saved_run(saved_id, resp)

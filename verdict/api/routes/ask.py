@@ -12,6 +12,7 @@ ask ids do not leak. The provider (admin) sees all.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 
@@ -23,6 +24,7 @@ from verdict.api.present import ask_response
 from verdict.api.routes.review import approve_with_sql
 from verdict.api.schemas import AskRequest, ChooseRequest, FlagRequest
 from verdict.engine.ask import ask as run_ask
+from verdict.engine.knowledge import normalize
 from verdict.engine.llm import LLMError
 from verdict.store.db import NotEnoughCredits, new_id, now
 
@@ -32,8 +34,24 @@ log = logging.getLogger("verdict.api")
 NO_CREDITS = "You have no credits left. Ask the provider for more."
 
 
-def perform_ask(s, user: dict, question: str, database_id: str | None, model_id: str | None) -> dict:
-    """Run one ask for ``user``, charge for it, and return the response."""
+def cache_key(s, db_id: str, question: str, model_id: str, second_id: str) -> str:
+    """Same database, same question (case and spacing ignored), same model and
+    setup, same knowledge version: same key."""
+    parts = [db_id, normalize(question), model_id, second_id, str(s.attempts),
+             str(s.store.knowledge_version(db_id))]
+    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+
+
+def perform_ask(
+    s, user: dict, question: str, database_id: str | None, model_id: str | None, fresh: bool = False,
+) -> dict:
+    """Run one ask for ``user``, charge for it, and return the response.
+
+    A repeated question is answered from the cache (``cache_hit: true``) when
+    nothing that could change the answer has changed. It is still saved as the
+    user's own ask and charged like any answer. The provider's own asks are free.
+    ``fresh=True`` skips the cache (asking a saved question again).
+    """
     settings = s.settings()
     db = get_database(s, database_id or settings["database_id"])
     model = s.model(model_id or settings["model"])
@@ -42,43 +60,31 @@ def perform_ask(s, user: dict, question: str, database_id: str | None, model_id:
     if not question or not question.strip():
         raise HTTPException(400, "The question is empty.")
 
-    price = s.price_ask
+    m2 = None
+    if settings.get("second_model"):
+        m2 = s.model(settings.get("second_model_id") or "")
+        if m2 is not None and m2.id == model.id:
+            m2 = None
+    key = cache_key(s, db.id, question, model.id, m2.id if m2 else "")
+
+    price = 0 if is_admin(user) else s.price_ask
     if not s.reserve_credits(user["id"], price):
         raise HTTPException(402, NO_CREDITS)
     try:
-        second = None
-        if settings.get("second_model"):
-            m2 = s.model(settings.get("second_model_id") or "")
-            if m2 is not None and m2.id != model.id:
-                try:
-                    second = s.writer_factory(m2)
-                except Exception:
-                    second = None  # optional; the check shows "off"
-
-        try:
-            writer = s.writer_factory(model)
-        except LLMError as e:
-            raise HTTPException(503, f"The model is not available: {e}") from None
-
         start = time.perf_counter()
-        try:
-            answer = run_ask(
-                db.path, question, writer=writer, n=s.attempts, thresholds=s.thresholds,
-                knowledge=s.store.knowledge(db.id), second_writer=second,
+        cached = s.store.cache_get(key) if s.cache_enabled and not fresh else None
+        if cached is not None:
+            resp = dict(cached["response"])
+            resp.update(
+                ask_id=new_id("a"), question=question, created_at=now(),
+                latency_ms=int((time.perf_counter() - start) * 1000),
+                cache_hit=True, cached_at=cached["created_at"],
+                review_id=None, flagged=False, flag_note=None,
             )
-        except LLMError as e:
-            raise HTTPException(503, f"The model is not reachable: {e}") from None
-        except Exception:
-            # Any other failure is the server's, not the question's.
-            log.exception("ask failed")
-            raise HTTPException(500, "Something went wrong on the server. You were not charged.") from None
-        latency_ms = int((time.perf_counter() - start) * 1000)
-
-        resp = ask_response(
-            answer, ask_id=new_id("a"), database_id=db.id, model_id=model.id,
-            model_label=model.label, latency_ms=latency_ms, created_at=now(),
-            tested_trust=tested_trust(s),
-        )
+        else:
+            resp = _run_fresh(s, db, model, m2, question, start)
+            if s.cache_enabled:
+                s.store.cache_put(key, db.id, question, resp)
         try:
             s.store.save_ask_and_charge(resp, user["id"], price)
         except NotEnoughCredits:
@@ -90,6 +96,38 @@ def perform_ask(s, user: dict, question: str, database_id: str | None, model_id:
     # Everything that is not trusted goes to the review queue.
     if resp["level"] != "trusted":
         resp["review_id"] = s.store.add_review_item(resp["ask_id"], "auto")["id"]
+    return resp
+
+
+def _run_fresh(s, db, model, m2, question: str, start: float) -> dict:
+    second = None
+    if m2 is not None:
+        try:
+            second = s.writer_factory(m2)
+        except Exception:
+            second = None  # optional; the check shows "off"
+    try:
+        writer = s.writer_factory(model)
+    except LLMError as e:
+        raise HTTPException(503, f"The model is not available: {e}") from None
+    try:
+        answer = run_ask(
+            db.path, question, writer=writer, n=s.attempts, thresholds=s.thresholds,
+            knowledge=s.store.knowledge(db.id), second_writer=second,
+        )
+    except LLMError as e:
+        raise HTTPException(503, f"The model is not reachable: {e}") from None
+    except Exception:
+        # Any other failure is the server's, not the question's.
+        log.exception("ask failed")
+        raise HTTPException(500, "Something went wrong on the server. You were not charged.") from None
+    resp = ask_response(
+        answer, ask_id=new_id("a"), database_id=db.id, model_id=model.id,
+        model_label=model.label, latency_ms=int((time.perf_counter() - start) * 1000),
+        created_at=now(), tested_trust=tested_trust(s),
+    )
+    resp["cache_hit"] = False
+    resp["cached_at"] = None
     return resp
 
 

@@ -6,7 +6,7 @@ How Verdict runs in each of its three setups. The same code runs in all of them.
 
 | Variable | What it sets | Default |
 |---|---|---|
-| `VERDICT_QWEN_URL` | Address of the Qwen server (vLLM or Ollama, OpenAI-compatible) | `http://localhost:11434/v1` (Ollama on this machine) |
+| `VERDICT_QWEN_URL` | Address of the Qwen server (vLLM or Ollama, OpenAI-compatible) | `http://127.0.0.1:11434/v1` (Ollama on this machine). Use 127.0.0.1, not localhost: on Windows, localhost first tries IPv6 and adds about 2 seconds to every call. |
 | `VERDICT_QWEN_MODEL` | Model name on that server | `verdict-qwen` |
 | `VERDICT_MODELS_FILE` | Optional JSON list of models. Replaces the two defaults, for example to list base, SFT and GRPO separately. | not set |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | Only if Gemini is used (cloud mode or second model) | read from `.env` |
@@ -19,6 +19,7 @@ How Verdict runs in each of its three setups. The same code runs in all of them.
 | `VERDICT_SIGNUP_CREDITS` | Starting credits for a new account. Set 0 to hand out every credit yourself. | `20` |
 | `VERDICT_PRICE_ASK` | Credits for one question (flat, however many attempts) | `1` |
 | `VERDICT_PRICE_ARENA_OUTSIDE_MODEL` | Credits per outside model in a live Arena run | `1` |
+| `VERDICT_CACHE` | `off` answers every question fresh. When on, a repeated question on the same database is answered from the cache until that database's knowledge changes. | `on` |
 | `VERDICT_AUTH_RATE` | Login and signup tries per minute from one address | `10` |
 | `VERDICT_TRUST_PROXY` | Set to `1` behind Cloudflare Tunnel, so the rate limit sees each visitor's address (`CF-Connecting-IP`) instead of the tunnel's. Leave unset when the server is reached directly. | not set |
 

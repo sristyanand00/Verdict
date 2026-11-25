@@ -61,6 +61,7 @@ def env(tmp_path):
         admin_email="admin@test.local",
         admin_password="admin-password-1",
         auth_rate_per_minute=0,
+        cache_enabled=False,
     )
     client = TestClient(create_app(state, frontend_dist=None))
     login_as(client, signup(client, "ana@test.local"))

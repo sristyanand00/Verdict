@@ -90,6 +90,14 @@ CREATE TABLE IF NOT EXISTS ask_events (
     action TEXT NOT NULL, detail TEXT, created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS events_ask ON ask_events(ask_id);
+CREATE TABLE IF NOT EXISTS ask_cache (
+    key TEXT PRIMARY KEY, database_id TEXT NOT NULL, question TEXT NOT NULL,
+    response TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS cache_db ON ask_cache(database_id);
+CREATE TABLE IF NOT EXISTS knowledge_versions (
+    database_id TEXT PRIMARY KEY, version INTEGER NOT NULL
+);
 """
 
 #: Columns added after the first release. Old app.db files get them on open.
@@ -399,6 +407,7 @@ class Store:
             "INSERT INTO meanings VALUES (?, ?, ?, ?, ?, ?)",
             (mid, database_id, term.strip(), definition.strip(), sql_hint, now()),
         )
+        self._bump_knowledge(database_id)
         return self._one("SELECT * FROM meanings WHERE id = ?", (mid,))
 
     def add_example(
@@ -410,6 +419,7 @@ class Store:
             "INSERT INTO examples VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (eid, database_id, question.strip(), sql, _dump(columns), _dump(rows), from_review_id, now()),
         )
+        self._bump_knowledge(database_id)
         return self._one("SELECT * FROM examples WHERE id = ?", (eid,))
 
     def add_known_number(
@@ -421,6 +431,7 @@ class Store:
             " created_at, last_checked_at, last_ok) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
             (kid, database_id, name.strip(), question.strip(), sql, _dump(columns), _dump(value), now(), now()),
         )
+        self._bump_knowledge(database_id)
         return self.get_known_number(kid)
 
     def get_known_number(self, kid: str) -> dict | None:
@@ -446,7 +457,53 @@ class Store:
         table = self._KINDS.get(kind)
         if table is None:
             raise ValueError(f"unknown knowledge kind: {kind}")
-        return self._run(f"DELETE FROM {table} WHERE id = ?", (item_id,)) > 0
+        row = self._one(f"SELECT database_id FROM {table} WHERE id = ?", (item_id,))
+        deleted = self._run(f"DELETE FROM {table} WHERE id = ?", (item_id,)) > 0
+        if deleted and row:
+            self._bump_knowledge(row["database_id"])
+        return deleted
+
+    # -- knowledge version and the answer cache -------------------------------
+
+    def _bump_knowledge(self, database_id: str) -> None:
+        """Every change to a database's knowledge raises its version.
+
+        The version is part of the cache key, so answers cached before the
+        change are not served after it: the next ask runs fresh and uses the
+        new knowledge.
+        """
+        self._run(
+            "INSERT INTO knowledge_versions VALUES (?, 1) ON CONFLICT(database_id)"
+            " DO UPDATE SET version = version + 1",
+            (database_id,),
+        )
+
+    def knowledge_version(self, database_id: str) -> int:
+        row = self._one("SELECT version FROM knowledge_versions WHERE database_id = ?", (database_id,))
+        return int(row["version"]) if row else 0
+
+    def cache_get(self, key: str) -> dict | None:
+        row = self._one("SELECT response, created_at FROM ask_cache WHERE key = ?", (key,))
+        if row is None:
+            return None
+        return {"response": row["response"], "created_at": row["created_at"]}
+
+    def cache_put(self, key: str, database_id: str, question: str, response: dict) -> None:
+        self._run(
+            "INSERT INTO ask_cache (key, database_id, question, response, created_at) VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT(key) DO UPDATE SET response = excluded.response, created_at = excluded.created_at",
+            (key, database_id, question, _dump(response), now()),
+        )
+
+    def cache_clear(self, database_id: str | None = None) -> int:
+        if database_id:
+            return self._run("DELETE FROM ask_cache WHERE database_id = ?", (database_id,))
+        return self._run("DELETE FROM ask_cache")
+
+    def cache_list(self) -> list[dict]:
+        return self._all(
+            "SELECT database_id, question, created_at FROM ask_cache ORDER BY created_at DESC"
+        )
 
     # -- settings ------------------------------------------------------------
 

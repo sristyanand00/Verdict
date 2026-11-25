@@ -5,7 +5,7 @@ from environment variables, so the same code runs everywhere:
 
     VERDICT_APP_DB          path of data/app.db
     VERDICT_OLIST_PATH      path of the Olist SQLite file
-    VERDICT_QWEN_URL        OpenAI-compatible server, e.g. http://localhost:11434/v1
+    VERDICT_QWEN_URL        OpenAI-compatible server, e.g. http://127.0.0.1:11434/v1
     VERDICT_QWEN_MODEL      model name on that server, e.g. verdict-qwen
     VERDICT_MODELS_FILE     optional JSON file listing models (replaces the defaults)
     VERDICT_ATTEMPTS        attempts per question (default 8)
@@ -21,6 +21,7 @@ Accounts and credits:
     VERDICT_PRICE_ARENA_OUTSIDE_MODEL
                             credits per outside model in a live Arena run (default 1)
     VERDICT_AUTH_RATE       login and signup tries per minute per IP (default 10)
+    VERDICT_CACHE           "off" answers every question fresh (default on)
 """
 
 from __future__ import annotations
@@ -105,7 +106,7 @@ def default_models() -> list[ModelEntry]:
     return [
         ModelEntry(
             "qwen", "Qwen 1.5B (trained), private", "openai", True,
-            base_url=os.environ.get("VERDICT_QWEN_URL", "http://localhost:11434/v1"),
+            base_url=os.environ.get("VERDICT_QWEN_URL", "http://127.0.0.1:11434/v1"),
             model=os.environ.get("VERDICT_QWEN_MODEL", "verdict-qwen"),
         ),
         ModelEntry(
@@ -176,6 +177,8 @@ class AppState:
     admin_email: str | None = None
     admin_password: str | None = None
     auth_rate_per_minute: int = DEFAULT_AUTH_RATE
+    #: repeated questions answered from the cache (VERDICT_CACHE=off turns it off)
+    cache_enabled: bool = True
     # Credits held by asks that are still running, per user. See reserve_credits.
     _reserved: dict[str, int] = field(default_factory=dict)
     _reserve_lock: threading.Lock = field(default_factory=threading.Lock)
@@ -200,6 +203,7 @@ class AppState:
             admin_email=env("VERDICT_ADMIN_EMAIL") or None,
             admin_password=env("VERDICT_ADMIN_PASSWORD") or None,
             auth_rate_per_minute=int(env("VERDICT_AUTH_RATE", DEFAULT_AUTH_RATE)),
+            cache_enabled=(env("VERDICT_CACHE", "on").strip().lower() not in ("off", "0", "false", "no")),
         )
 
     def prices(self) -> dict[str, int]:

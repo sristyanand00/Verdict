@@ -137,7 +137,7 @@ class OpenAICompatWriter:
     One class covers both places Qwen runs:
 
         vLLM on the college GPU   OpenAICompatWriter("http://gpu-pc:8000/v1", "verdict-qwen")
-        Ollama on the laptop      OpenAICompatWriter("http://localhost:11434/v1", "verdict-qwen")
+        Ollama on the laptop      OpenAICompatWriter("http://127.0.0.1:11434/v1", "verdict-qwen")
 
     The n attempts are n separate requests sent at the same time. vLLM batches
     them on the GPU. Ollama ignores the API's ``n`` option, so one request per
