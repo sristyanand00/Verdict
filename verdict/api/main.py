@@ -56,7 +56,8 @@ def create_app(app_state: AppState | None = None, frontend_dist: Path | None = F
             source = json.loads(THRESHOLDS_FILE.read_text(encoding="utf-8")).get("source", "")
         except Exception:
             source = "unreadable"
-        dbs = {d.id: d.available for d in s.databases()}
+        # Only the preloaded databases: uploads belong to their users.
+        dbs = {d.id: d.available for d in s.preloaded}
         mods = {m["id"]: m["reachable"] for m in models_json(s)}
         return {
             "ok": s.store.ok(),
@@ -64,7 +65,7 @@ def create_app(app_state: AppState | None = None, frontend_dist: Path | None = F
             "databases": dbs,
             "models": mods,
             "attempts": s.attempts,
-            # True until the Evaluation chat writes measured thresholds.
+            # True until the evaluation step writes measured thresholds.
             "thresholds_placeholder": source.upper().startswith("PLACEHOLDER"),
             "results_ready": s.results_file("results.json") is not None,
         }

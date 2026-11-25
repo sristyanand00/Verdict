@@ -62,6 +62,7 @@ def env(tmp_path):
         admin_password="admin-password-1",
         auth_rate_per_minute=0,
         cache_enabled=False,
+        ask_rate_per_minute=0,
     )
     client = TestClient(create_app(state, frontend_dist=None))
     login_as(client, signup(client, "ana@test.local"))
@@ -76,6 +77,15 @@ def signup(client, email, password="password-123", name="Ana"):
 
 def login_as(client, token):
     client.headers["Authorization"] = f"Bearer {token}"
+
+
+def as_admin(client):
+    """A second client on the same app, logged in as the provider."""
+    a = TestClient(client.app)
+    r = a.post("/api/auth/login", json={"email": "admin@test.local", "password": "admin-password-1"})
+    assert r.status_code == 200, r.text
+    login_as(a, r.json()["token"])
+    return a
 
 
 def ask(client, q, **kw):
@@ -129,7 +139,7 @@ def test_trusted_answer(env):
 def test_settings_pick_database_and_model(env):
     client, w, _ = env
     w.replies = [block("SELECT COUNT(*) FROM students")]
-    client.put("/api/settings", json={"database_id": "tiny", "model": "fixed"})
+    as_admin(client).put("/api/settings", json={"database_id": "tiny", "model": "fixed"})
     r = client.post("/api/ask", json={"question": "How many students?"})
     assert r.status_code == 200 and r.json()["database_id"] == "tiny"
 
@@ -270,9 +280,12 @@ def test_meanings_and_known_numbers(env):
     m = client.post("/api/knowledge/meanings", json={
         "database_id": "tiny", "term": "top student", "definition": "highest average score"}).json()
     assert client.get("/api/knowledge", params={"database_id": "tiny"}).json()["meanings"][0]["id"] == m["id"]
-    assert client.delete(f"/api/knowledge/meanings/{m['id']}").json() == {"ok": True}
-    assert client.delete(f"/api/knowledge/meanings/{m['id']}").status_code == 404
-    assert client.delete("/api/knowledge/bogus/x").status_code == 400
+    # Knowledge is shared, so only the provider deletes it.
+    assert client.delete(f"/api/knowledge/meanings/{m['id']}").status_code == 403
+    admin = as_admin(client)
+    assert admin.delete(f"/api/knowledge/meanings/{m['id']}").json() == {"ok": True}
+    assert admin.delete(f"/api/knowledge/meanings/{m['id']}").status_code == 404
+    assert admin.delete("/api/knowledge/bogus/x").status_code == 400
 
     w.replies = [block("SELECT COUNT(*) FROM students")] * 5 + [block("SELECT 1")] * 2 + [block("SELECT 2")]
     rid = ask(client, "students?")["review_id"]
@@ -287,9 +300,11 @@ def test_settings(env):
     client, _, _ = env
     s = client.get("/api/settings").json()
     assert s["database_id"] == "tiny" and s["model"] == "fixed" and s["second_model"] is False
-    s = client.put("/api/settings", json={"second_model": True}).json()
+    assert client.put("/api/settings", json={"second_model": True}).status_code == 403
+    admin = as_admin(client)
+    s = admin.put("/api/settings", json={"second_model": True}).json()
     assert s["second_model"] is True
-    assert client.put("/api/settings", json={"model": "nope"}).status_code == 404
+    assert admin.put("/api/settings", json={"model": "nope"}).status_code == 404
     models = client.get("/api/models").json()
     assert models == [{"id": "fixed", "label": "Fixed replies", "kind": "own", "provider": "fixed",
                        "private": True, "reachable": True}]

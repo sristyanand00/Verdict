@@ -20,6 +20,12 @@ How Verdict runs in each of its three setups. The same code runs in all of them.
 | `VERDICT_PRICE_ASK` | Credits for one question (flat, however many attempts) | `1` |
 | `VERDICT_PRICE_ARENA_OUTSIDE_MODEL` | Credits per outside model in a live Arena run | `1` |
 | `VERDICT_CACHE` | `off` answers every question fresh. When on, a repeated question on the same database is answered from the cache until that database's knowledge changes. | `on` |
+| `VERDICT_UPLOADS` | `off` turns file uploads off (do this on a public server) | `on` |
+| `VERDICT_UPLOAD_TTL_HOURS` | Delete uploaded databases older than this many hours; `0` keeps them | `0` |
+| `VERDICT_ASK_TIMEOUT_S` | Stop a question after this many seconds (504, not charged) | `180` |
+| `VERDICT_ASK_RATE` | Questions per user per minute (429 after that) | `10` |
+| `VERDICT_MAX_CONCURRENT_ASKS` | Fresh questions running at the same time; the rest wait. Keep it low on a CPU-only machine. | `2` |
+| `VERDICT_QUEUE_WAIT_S` | How long a question waits for a free slot before 503 "busy" | `60` |
 | `VERDICT_AUTH_RATE` | Login and signup tries per minute from one address | `10` |
 | `VERDICT_TRUST_PROXY` | Set to `1` behind Cloudflare Tunnel, so the rate limit sees each visitor's address (`CF-Connecting-IP`) instead of the tunnel's. Leave unset when the server is reached directly. | not set |
 
@@ -53,7 +59,7 @@ python -m venv .venv
 pip install -e ".[app,dev]"
 ```
 
-## 1. While building (now until about 2 Dec)
+## 1. While building
 
 - **Backend** runs on the laptop: `uvicorn verdict.api.main:app --reload --port 8000`
 - **Frontend** runs on the laptop: `cd frontend` then `npm run dev`. Vite passes `/api` calls to port 8000.
@@ -64,25 +70,25 @@ pip install -e ".[app,dev]"
 - If the GPU is busy with training, the backend still works with Gemini, or with the tests (which need no model).
 - Check: `curl http://localhost:8000/api/health` shows `"qwen": true` under `models`.
 
-## 2. Demo day: everything on the laptop, wifi off (set up on days 15 to 16)
+## 2. Demo day: everything on the laptop, wifi off
 
 The college computer is not needed on demo day. It is only needed before that, for training and the full evaluation.
 
 1. **Model**:
-   - The Training chat merges the LoRA weights, converts the model to a GGUF file (8-bit q8_0, about 1.6 GB; see docs/TRAINING_RUNBOOK.md) and writes an Ollama `Modelfile`.
+   - The training step merges the LoRA weights, converts the model to a GGUF file (8-bit q8_0, about 1.6 GB; see docs/TRAINING_RUNBOOK.md) and writes an Ollama `Modelfile`.
    - On the laptop: `ollama create verdict-qwen -f Modelfile`, then `ollama serve`.
    - The default `VERDICT_QWEN_URL` already points at Ollama.
 2. **One server for everything**:
    - Build the website once with `cd frontend` then `npm run build`.
    - The backend serves `frontend/dist` itself, so the whole product is one process at `http://localhost:8000`.
 3. **Start**: `uvicorn verdict.api.main:app --port 8000`, then open `http://localhost:8000`.
-4. **Proof pages**: `results/results.json` and `results/arena.json` come from the Evaluation chat. They are plain files, so they work offline.
+4. **Proof pages**: `results/results.json` and `results/arena.json` come from the evaluation step. They are plain files, so they work offline.
 5. **Speed**:
    - Measure how long 8 attempts take on the laptop.
    - If it is too slow, set `VERDICT_ATTEMPTS=4`. The evidence view shows the number of attempts, so this is visible, not hidden.
 6. **Demo cache**:
    - The scripted demo questions are answered ahead of time and saved, so a slow or unlucky run cannot break the demo on stage.
-   - To build on days 15 to 16, with the Data and demo chat.
+   - Build it with `scripts/warm_cache.py` once the demo question list exists.
 7. **Rehearsal checklist**:
    - Reboot, turn the wifi off, start Ollama and the backend.
    - Run the full demo 10 times in a row.
@@ -108,11 +114,11 @@ The college computer is not needed on demo day. It is only needed before that, f
 
 ## Who provides what
 
-| From | What | Needed by |
-|---|---|---|
-| Training chat | vLLM server on the GPU PC (address, port, model names) | day 3 |
-| Training chat | GGUF file and Ollama `Modelfile` | day 15 |
-| Data and demo chat | `datasets/olist/olist.sqlite` | day 3 |
-| Data and demo chat | Demo question list for the cache | day 15 |
-| Evaluation chat | `verdict/engine/thresholds.json` (measured), `results/results.json` with a `tested_trust` entry, `results/arena.json` | day 6 |
-| Frontend chat | A build that works when served from the backend (`npm run build`) | day 14 |
+| From | What |
+|---|---|
+| Training | vLLM server on the GPU PC (address, port, model names) |
+| Training | GGUF file and Ollama `Modelfile` |
+| Data and demo | `datasets/olist/olist.sqlite` |
+| Data and demo | Demo question list for the cache |
+| Evaluation | `verdict/engine/thresholds.json` (measured), `results/results.json` with a `tested_trust` entry, `results/arena.json` |
+| Frontend | A build that works when served from the backend (`npm run build`) |

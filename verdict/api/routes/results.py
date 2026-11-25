@@ -1,7 +1,7 @@
 """/api/results and /api/arena: precomputed proof for the Trust Report and
 Model Arena pages.
 
-Both read files the Evaluation chat writes into results/, so the proof pages
+Both read files the evaluation step writes into results/, so the proof pages
 work with no GPU and no internet:
 
     results/results.json   the Trust Report numbers (and "tested_trust")
@@ -34,7 +34,7 @@ ARENA_MODEL_FIELDS = ("model_id", "label", "kind", "benchmark", "n_questions", "
 def arena_models(request: Request) -> list[dict]:
     """One scoreboard row per model, from results.json "arena_models".
 
-    An empty list until the Evaluation chat writes that list.
+    An empty list until the evaluation step writes that list.
     """
     data = state(request).results_file("results.json") or {}
     rows = data.get("arena_models") if isinstance(data, dict) else None

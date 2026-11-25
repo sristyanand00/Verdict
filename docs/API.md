@@ -1,6 +1,6 @@
 # Verdict API contract
 
-The frontend builds against this file. Only the Backend chat changes it. If something here does not match what the server returns, the server is wrong. Report it.
+The frontend builds against this file. Only the backend changes it. If something here does not match what the server returns, the server is wrong. Report it.
 
 - Base path: `/api`. Everything is JSON, except the file upload.
 - Errors come back as `{"detail": "..."}` with a normal HTTP status code:
@@ -11,9 +11,10 @@ The frontend builds against this file. Only the Backend chat changes it. If some
   - 404: not found. Also returned for another user's ask, review item or saved answer, so ids do not leak.
   - 409: conflict (for example, the item is already resolved, or the email has an account)
   - 422: a field is missing or invalid
-  - 429: too many login or signup tries from one address. Wait a minute.
+  - 429: too many login or signup tries from one address, or too many questions from one user in a minute. Wait a minute.
   - 500: the server failed. An ask that fails this way is not charged.
-  - 503: the model is not reachable. Not charged.
+  - 503: the model is not reachable, or the server is busy with other questions. Not charged. The text never shows server addresses or internal errors.
+  - 504: the question took longer than the server's time limit and was stopped. Not charged.
 - Live list of routes while the server runs: `http://localhost:8000/docs`.
 - Code: `verdict/api/`. Tests: `tests/test_api.py`, `tests/test_accounts.py`.
 
@@ -25,7 +26,9 @@ The frontend builds against this file. Only the Backend chat changes it. If some
 - Who sees what:
   - Asks, review items and saved answers belong to the user who made them. An analyst sees only their own. The provider sees all.
   - Knowledge (meanings, examples, known numbers) is shared by everyone using the same database, for now. An approval by one analyst helps the next analyst's question.
-  - Settings (`/api/settings`) are shared by everyone for now.
+  - Settings (`/api/settings`) are shared by everyone, so only the provider can change them (`PUT` is admin only).
+  - An uploaded database belongs to the user who uploaded it: only they and the provider see it in `/api/databases` or can use it. For anyone else it is 404.
+  - Knowledge can be added by any user of a database, but only the provider deletes it.
 
 ## Levels and reasons
 
@@ -175,7 +178,7 @@ Field notes:
   - So a Trusted answer with no approved history shows three ticks: `ran`, `agreement`, `not_empty`.
 - `options`: only when the reason is `two_meanings`. Each option is `{label, sql, columns, rows, size, answer_text}`.
 - `missing` and `tables_available`: only when the reason is `not_in_data`. `missing` is often `null` because the model usually does not say what is missing.
-- `tested_trust`: `{precision, low, high, on}` from `results/results.json`. It is `null` until the Evaluation chat writes that file. Show nothing when it is `null`.
+- `tested_trust`: `{precision, low, high, on}` from `results/results.json`. It is `null` until the evaluation step writes that file. Show nothing when it is `null`.
 - `lineage` (added 25 Nov): where the answer came from, read only from `sql`, with table aliases replaced by table names. `{output, formula, tables, columns, filters, period, group_by}`. `output` is the result's column names, `formula` the select expressions, `filters` the WHERE and HAVING conditions one by one, `period` the filters on date-like columns joined by "and" (or `null`). It is `null` when no answer is shown or the SQL cannot be read; hide the section then.
 - `agreement_level` is the older agreement-only level (`green`, `yellow`, `red` or `unanswerable`). It is kept for evaluation. The frontend can ignore it.
 - `cache_hit` and `cached_at` (added 26 Nov): a repeated question (same database, same words ignoring case and spacing, same model and attempts, and no change to that database's knowledge since) is answered from the cache. `cache_hit` is then `true` and `cached_at` is when the answer was first made; show it ("Answered from cache, first checked at ..."). It is still saved as the user's own ask, goes to the review queue if not trusted, and is charged like any answer. Any approval, fix, meaning or known number on that database makes the next ask run fresh.
@@ -259,7 +262,7 @@ The SQL goes through the same read-only verifier as every attempt, and anything 
 |---|---|---|
 | `GET /api/knowledge?database_id=olist` | | `{meanings: [...], examples: [...], known_numbers: [...]}` |
 | `POST /api/knowledge/meanings` | `{database_id, term, definition, sql_hint?}` | The new meaning |
-| `DELETE /api/knowledge/{kind}/{id}` | | `{"ok": true}`. `kind` is `meanings`, `examples` or `known`. |
+| `DELETE /api/knowledge/{kind}/{id}` | | `{"ok": true}`. `kind` is `meanings`, `examples` or `known`. Admin only (403 for analysts). |
 | `POST /api/knowledge/known/{id}/recheck` | | `{ok, changed, saved_value, value_now, result}` |
 
 What each item holds:
@@ -273,11 +276,11 @@ What each item holds:
 | Method and path | Returns |
 |---|---|
 | `GET /api/databases` | `[{id, name, source, available, tables_count}]`. `source` is `preloaded` or `upload`. If `available` is false, the file is not there yet. |
-| `POST /api/databases/upload` | Multipart, with the file in the field `file` (CSV, XLSX or SQLite, up to 50 MB). Returns `{id, name, source, available, tables_count, tables, columns}`. |
+| `POST /api/databases/upload` | Multipart, with the file in the field `file` (CSV, XLSX or SQLite, up to 50 MB). Returns `{id, name, source, available, tables_count, tables, columns}`. 403 when the server has uploads turned off. Old uploads may be deleted automatically (`VERDICT_UPLOAD_TTL_HOURS`). |
 | `GET /api/databases/{id}/schema` | `{id, name, tables: [{name, row_count, columns: [{name, type}]}]}` |
 | `GET /api/models` | `[{id, label, kind, provider, private, reachable}]`. `kind` is `own` (the user's Qwen model, any version) or `outside` (Gemini and others, used only in the Model Arena). `provider` is how the server reaches it: `openai` (vLLM or Ollama) or `gemini`. Changed 25 Nov: `kind` used to hold what `provider` holds now. |
 | `GET /api/settings` | `{database_id, model, second_model, second_model_id}` |
-| `PUT /api/settings` | The same fields, all optional. Returns the new settings. |
+| `PUT /api/settings` | The same fields, all optional. Returns the new settings. Admin only (403 for analysts). |
 
 The preloaded database ids are `olist`, `financial` and `debit_card_specializing`.
 
@@ -287,11 +290,11 @@ The default model ids are `qwen` (vLLM or Ollama) and `gemini`. A setup can list
 
 | Method and path | Returns |
 |---|---|
-| `GET /api/results` | `results/results.json` as written by the Evaluation chat. 404 until it exists. |
-| `GET /api/arena/models` | The Arena scoreboard: `[{model_id, label, kind, benchmark, n_questions, accuracy, measured_at}]`, from the `arena_models` list in `results/results.json`. `kind` is `own` or `outside`. `accuracy` is 0 to 1, or `null` when not measured yet; the server never fills in a number. `[]` until the Evaluation chat writes that list. |
+| `GET /api/results` | `results/results.json` as written by the evaluation step. 404 until it exists. |
+| `GET /api/arena/models` | The Arena scoreboard: `[{model_id, label, kind, benchmark, n_questions, accuracy, measured_at}]`, from the `arena_models` list in `results/results.json`. `kind` is `own` or `outside`. `accuracy` is 0 to 1, or `null` when not measured yet; the server never fills in a number. `[]` until the evaluation step writes that list. |
 | `GET /api/arena` | The list of scripted question keys |
 | `GET /api/arena/{key}` | The cached 4-model answers for one question, from `results/arena.json` |
-| `GET /api/health` | `{ok, app_db, databases: {id: available}, models: {id: reachable}, attempts, thresholds_placeholder, results_ready}` |
+| `GET /api/health` | `{ok, app_db, databases: {id: available}, models: {id: reachable}, attempts, thresholds_placeholder, results_ready}`. `databases` lists only the preloaded ones. |
 
 ## Changes from plan section 8
 

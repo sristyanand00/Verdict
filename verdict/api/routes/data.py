@@ -6,7 +6,9 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+
+from verdict.api.auth import current_user
 
 from verdict.api.deps import get_database, run_sql, state
 from verdict.api.present import result_json
@@ -29,18 +31,18 @@ def _db_json(d) -> dict:
 
 
 @router.get("/databases")
-def list_databases(request: Request) -> list[dict]:
-    return [_db_json(d) for d in state(request).databases()]
+def list_databases(request: Request, user: dict = Depends(current_user)) -> list[dict]:
+    return [_db_json(d) for d in state(request).databases(user)]
 
 
 @router.get("/databases/{db_id}/schema")
-def schema(db_id: str, request: Request) -> dict:
+def schema(db_id: str, request: Request, user: dict = Depends(current_user)) -> dict:
     import sqlite3
     from contextlib import closing
 
     from verdict.verifier.safety import read_only_uri
 
-    db = get_database(state(request), db_id)
+    db = get_database(state(request), db_id, user)
     counts = table_counts(db.path)
     tables = []
     with closing(sqlite3.connect(read_only_uri(db.path), uri=True)) as con:
@@ -55,8 +57,10 @@ def schema(db_id: str, request: Request) -> dict:
 
 
 @router.post("/databases/upload")
-def upload(request: Request, file: UploadFile = File(...)) -> dict:
+def upload(request: Request, file: UploadFile = File(...), user: dict = Depends(current_user)) -> dict:
     s = state(request)
+    if not s.uploads_enabled:
+        raise HTTPException(403, "Uploads are turned off on this server. Use one of the provided databases.")
     name = Path(file.filename or "upload").name
     ext = Path(name).suffix.lower()
     if ext not in CSV_EXTS | EXCEL_EXTS | SQLITE_EXTS:
@@ -73,7 +77,10 @@ def upload(request: Request, file: UploadFile = File(...)) -> dict:
         except IngestError as e:
             raise HTTPException(400, str(e)) from None
 
-    row = s.store.add_database(Path(name).stem, str(result.db_path), "upload", len(result.tables))
+    # Only the user who uploaded it (and the provider) can see or query it.
+    row = s.store.add_database(
+        Path(name).stem, str(result.db_path), "upload", len(result.tables), user_id=user["id"]
+    )
     return {
         "id": row["id"], "name": row["name"], "source": "upload", "available": True,
         "tables_count": len(result.tables), "tables": result.tables, "columns": result.columns,
@@ -81,7 +88,7 @@ def upload(request: Request, file: UploadFile = File(...)) -> dict:
 
 
 @router.post("/sql/run")
-def sql_run(body: SqlRunRequest, request: Request) -> dict:
+def sql_run(body: SqlRunRequest, request: Request, user: dict = Depends(current_user)) -> dict:
     """Run the analyst's SQL through the same safe verifier as every attempt."""
-    db = get_database(state(request), body.database_id)
+    db = get_database(state(request), body.database_id, user)
     return result_json(run_sql(db, body.sql))

@@ -22,6 +22,17 @@ Accounts and credits:
                             credits per outside model in a live Arena run (default 1)
     VERDICT_AUTH_RATE       login and signup tries per minute per IP (default 10)
     VERDICT_CACHE           "off" answers every question fresh (default on)
+
+Limits for a public server:
+
+    VERDICT_UPLOADS         "off" turns file uploads off (default on)
+    VERDICT_UPLOAD_TTL_HOURS
+                            delete uploads older than this (default 0: keep)
+    VERDICT_ASK_TIMEOUT_S   stop an ask after this many seconds (default 180)
+    VERDICT_ASK_RATE        questions per user per minute (default 10)
+    VERDICT_MAX_CONCURRENT_ASKS
+                            fresh asks running at once (default 2)
+    VERDICT_QUEUE_WAIT_S    how long an ask waits for a free slot (default 60)
 """
 
 from __future__ import annotations
@@ -45,6 +56,19 @@ DEFAULT_SIGNUP_CREDITS = 20
 DEFAULT_PRICE_ASK = 1
 DEFAULT_PRICE_ARENA = 1
 DEFAULT_AUTH_RATE = 10
+#: A whole ask (all attempts and queries) past this many seconds is stopped
+#: and not charged.
+DEFAULT_ASK_TIMEOUT_S = 180
+#: Questions per user per minute.
+DEFAULT_ASK_RATE = 10
+#: Fresh asks running at the same time. A CPU model slows down for everyone
+#: when more run at once, so the rest wait, up to DEFAULT_QUEUE_WAIT_S.
+DEFAULT_MAX_CONCURRENT_ASKS = 2
+DEFAULT_QUEUE_WAIT_S = 60
+
+
+def _on(value: str) -> bool:
+    return value.strip().lower() not in ("off", "0", "false", "no")
 
 
 # -- databases ---------------------------------------------------------------
@@ -55,6 +79,15 @@ class Database:
     name: str
     path: Path
     source: str  # "preloaded" or "upload"
+    #: who uploaded it; None for preloaded databases (everyone may use those)
+    owner: str | None = None
+
+    def visible_to(self, user: dict | None) -> bool:
+        """Preloaded databases are for everyone; an upload only for its owner
+        and the provider. ``user`` None means a trusted internal caller."""
+        if self.source != "upload" or user is None:
+            return True
+        return user.get("role") == "admin" or user.get("id") == self.owner
 
     @property
     def available(self) -> bool:
@@ -179,6 +212,27 @@ class AppState:
     auth_rate_per_minute: int = DEFAULT_AUTH_RATE
     #: repeated questions answered from the cache (VERDICT_CACHE=off turns it off)
     cache_enabled: bool = True
+    # limits for a public server
+    uploads_enabled: bool = True
+    upload_ttl_hours: float = 0
+    ask_timeout_s: float = DEFAULT_ASK_TIMEOUT_S
+    ask_rate_per_minute: int = DEFAULT_ASK_RATE
+    max_concurrent_asks: int = DEFAULT_MAX_CONCURRENT_ASKS
+    queue_wait_s: float = DEFAULT_QUEUE_WAIT_S
+
+    def __post_init__(self) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        from verdict.api.auth import RateLimiter
+
+        self.ask_limiter = RateLimiter(
+            self.ask_rate_per_minute,
+            message="You are asking questions faster than this server allows. Wait a minute.",
+        )
+        self.ask_slots = threading.BoundedSemaphore(max(1, self.max_concurrent_asks))
+        # Enough threads for running asks plus ones stopped by the time limit
+        # that are still finishing.
+        self.ask_pool = ThreadPoolExecutor(max_workers=max(1, self.max_concurrent_asks) * 4)
     # Credits held by asks that are still running, per user. See reserve_credits.
     _reserved: dict[str, int] = field(default_factory=dict)
     _reserve_lock: threading.Lock = field(default_factory=threading.Lock)
@@ -203,7 +257,13 @@ class AppState:
             admin_email=env("VERDICT_ADMIN_EMAIL") or None,
             admin_password=env("VERDICT_ADMIN_PASSWORD") or None,
             auth_rate_per_minute=int(env("VERDICT_AUTH_RATE", DEFAULT_AUTH_RATE)),
-            cache_enabled=(env("VERDICT_CACHE", "on").strip().lower() not in ("off", "0", "false", "no")),
+            cache_enabled=_on(env("VERDICT_CACHE", "on")),
+            uploads_enabled=_on(env("VERDICT_UPLOADS", "on")),
+            upload_ttl_hours=float(env("VERDICT_UPLOAD_TTL_HOURS", 0)),
+            ask_timeout_s=float(env("VERDICT_ASK_TIMEOUT_S", DEFAULT_ASK_TIMEOUT_S)),
+            ask_rate_per_minute=int(env("VERDICT_ASK_RATE", DEFAULT_ASK_RATE)),
+            max_concurrent_asks=int(env("VERDICT_MAX_CONCURRENT_ASKS", DEFAULT_MAX_CONCURRENT_ASKS)),
+            queue_wait_s=float(env("VERDICT_QUEUE_WAIT_S", DEFAULT_QUEUE_WAIT_S)),
         )
 
     def prices(self) -> dict[str, int]:
@@ -241,15 +301,32 @@ class AppState:
 
     # databases
 
-    def databases(self) -> list[Database]:
+    def databases(self, user: dict | None = None) -> list[Database]:
+        """Preloaded databases plus the uploads ``user`` may see."""
+        self.remove_old_uploads()
         ups = [
-            Database(d["id"], d["name"], Path(d["path"]), d["source"])
+            Database(d["id"], d["name"], Path(d["path"]), d["source"], d.get("user_id"))
             for d in self.store.list_databases()
         ]
-        return self.preloaded + ups
+        return self.preloaded + [d for d in ups if d.visible_to(user)]
 
-    def database(self, db_id: str) -> Database | None:
-        return next((d for d in self.databases() if d.id == db_id), None)
+    def database(self, db_id: str, user: dict | None = None) -> Database | None:
+        return next((d for d in self.databases(user) if d.id == db_id), None)
+
+    def remove_old_uploads(self) -> None:
+        """Delete uploads older than upload_ttl_hours (0 keeps them)."""
+        if self.upload_ttl_hours <= 0:
+            return
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=self.upload_ttl_hours)).isoformat(
+            timespec="seconds")
+        for d in self.store.uploads_older_than(cutoff):
+            try:
+                Path(d["path"]).unlink(missing_ok=True)
+            except OSError:
+                continue  # still open somewhere; try again next time
+            self.store.delete_database(d["id"])
 
     # models
 
@@ -267,7 +344,7 @@ class AppState:
         s.setdefault("second_model_id", next((m.id for m in self.models if m.kind == "gemini"), ""))
         return s
 
-    # precomputed proof files from the Evaluation chat
+    # precomputed proof files from the evaluation step
 
     def results_file(self, name: str) -> dict | None:
         p = self.results_dir / name

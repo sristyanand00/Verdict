@@ -1,6 +1,6 @@
 # Verdict: project context
 
-Read this first. It is the short, current picture of the whole project. Each section points to the file with the details. Written 25 Nov 2026 by the Backend session; whoever changes something big updates the matching section here.
+Read this first. It is the short, current picture of the whole project. Each section points to the file with the details. Written 25 Nov 2026; whoever changes something big updates the matching section here.
 
 Older files describe older versions of the idea. In particular `VERDICT-MASTER-CONTEXT.md` (15 Sept) describes the first framing, "an RL environment for text-to-SQL", which is no longer the product. Use it only as history.
 
@@ -36,9 +36,9 @@ Code map: `verdict/verifier` (safe execution, the most tested part), `verdict/en
 
 ## 3. Who owns what
 
-Five sessions work in the same repo. Stay in your own folders; if something elsewhere must change, tell the user which session should do it. Every session adds a line to `LOG.md`.
+The project has five parts, each with its own folders. Stay in your own folders; if something elsewhere must change, ask the owner of that part. Every part adds a line to `LOG.md` when it finishes something.
 
-| Session | Owns |
+| Part | Owns |
 |---|---|
 | Frontend | `frontend/` |
 | Backend | `verdict/api/`, `verdict/store/`, `verdict/engine/` (not `thresholds.json`), `docs/API.md`, `docs/DEPLOYMENT.md`, `pyproject.toml`, `.gitignore`, `.github/` |
@@ -83,7 +83,7 @@ Full list: `docs/BRUTAL-REVIEW-22NOV.md`.
 
 Backend (in order): demo answer cache (`cache_hit`); live Model Arena run (`POST /api/arena/run`, credits for outside models); hardening for a public link (time limit per question, per-user limit, uploads off, no internal error text); clear health check; admin usage stats and a load test (1, 5, 10 users); deployment steps tested.
 
-Needs the user or other sessions:
+Needs other parts of the project:
 - Ollama on the laptop and the exported model (`verdict-qwen.gguf` + `Modelfile`) from the college PC. Until then no real end-to-end ask has run.
 - `datasets/olist/olist.sqlite` and the demo question list (Data and demo).
 - Measured thresholds and `results/results.json` with `tested_trust` and `arena_models` (Evaluation).

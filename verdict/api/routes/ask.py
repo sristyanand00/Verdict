@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
+from concurrent.futures import TimeoutError as FutureTimeout
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -53,7 +54,7 @@ def perform_ask(
     ``fresh=True`` skips the cache (asking a saved question again).
     """
     settings = s.settings()
-    db = get_database(s, database_id or settings["database_id"])
+    db = get_database(s, database_id or settings["database_id"], user)
     model = s.model(model_id or settings["model"])
     if model is None:
         raise HTTPException(400, f"Unknown model: {model_id}")
@@ -66,6 +67,7 @@ def perform_ask(
         if m2 is not None and m2.id == model.id:
             m2 = None
     key = cache_key(s, db.id, question, model.id, m2.id if m2 else "")
+    s.ask_limiter.check(user["id"])
 
     price = 0 if is_admin(user) else s.price_ask
     if not s.reserve_credits(user["id"], price):
@@ -99,7 +101,34 @@ def perform_ask(
     return resp
 
 
+BUSY = "The server is busy with other questions. Try again in a minute. You were not charged."
+TOO_SLOW = "The question took too long to answer, so it was stopped. You were not charged."
+MODEL_DOWN = "The model is not reachable right now. Try again later. You were not charged."
+
+
 def _run_fresh(s, db, model, m2, question: str, start: float) -> dict:
+    """Run the pipeline in a worker thread, at most max_concurrent_asks at a
+    time, and stop waiting after ask_timeout_s.
+
+    A stopped ask keeps its slot until its thread really ends, so a slow
+    model cannot be flooded by retries.
+    """
+    if not s.ask_slots.acquire(timeout=s.queue_wait_s):
+        raise HTTPException(503, BUSY)
+    try:
+        future = s.ask_pool.submit(_pipeline, s, db, model, m2, question, start)
+    except Exception:
+        s.ask_slots.release()
+        raise
+    future.add_done_callback(lambda _: s.ask_slots.release())
+    try:
+        return future.result(timeout=s.ask_timeout_s)
+    except FutureTimeout:
+        log.warning("ask stopped after %.0f s", s.ask_timeout_s)
+        raise HTTPException(504, TOO_SLOW) from None
+
+
+def _pipeline(s, db, model, m2, question: str, start: float) -> dict:
     second = None
     if m2 is not None:
         try:
@@ -108,15 +137,18 @@ def _run_fresh(s, db, model, m2, question: str, start: float) -> dict:
             second = None  # optional; the check shows "off"
     try:
         writer = s.writer_factory(model)
-    except LLMError as e:
-        raise HTTPException(503, f"The model is not available: {e}") from None
+    except LLMError:
+        log.exception("model not available")
+        raise HTTPException(503, MODEL_DOWN) from None
     try:
         answer = run_ask(
             db.path, question, writer=writer, n=s.attempts, thresholds=s.thresholds,
             knowledge=s.store.knowledge(db.id), second_writer=second,
         )
-    except LLMError as e:
-        raise HTTPException(503, f"The model is not reachable: {e}") from None
+    except LLMError:
+        # The details (server address, error) go to the log, not to the user.
+        log.exception("model not reachable")
+        raise HTTPException(503, MODEL_DOWN) from None
     except Exception:
         # Any other failure is the server's, not the question's.
         log.exception("ask failed")

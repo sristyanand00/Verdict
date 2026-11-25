@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS knowledge_versions (
 _ADDED_COLUMNS = {
     "asks": [("user_id", "TEXT")],
     "review_items": [("user_id", "TEXT")],
+    "databases": [("user_id", "TEXT")],
 }
 
 #: Ledger kinds. "ask" and "arena" spend credits; the rest are the provider's
@@ -221,11 +222,14 @@ class Store:
 
     # -- databases (uploads) -------------------------------------------------
 
-    def add_database(self, name: str, path: str, source: str, tables_count: int) -> dict:
+    def add_database(
+        self, name: str, path: str, source: str, tables_count: int, user_id: str | None = None
+    ) -> dict:
         db_id = new_id("up")
         self._run(
-            "INSERT INTO databases VALUES (?, ?, ?, ?, ?, ?)",
-            (db_id, name, path, source, tables_count, now()),
+            "INSERT INTO databases (id, name, path, source, tables_count, created_at, user_id)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (db_id, name, path, source, tables_count, now(), user_id),
         )
         return self.get_database(db_id)
 
@@ -233,7 +237,16 @@ class Store:
         return self._one("SELECT * FROM databases WHERE id = ?", (db_id,))
 
     def list_databases(self) -> list[dict]:
+        """Every uploaded database. Who may see which is decided in AppState."""
         return self._all("SELECT * FROM databases ORDER BY created_at")
+
+    def uploads_older_than(self, cutoff: str) -> list[dict]:
+        return self._all(
+            "SELECT * FROM databases WHERE source = 'upload' AND created_at < ?", (cutoff,)
+        )
+
+    def delete_database(self, db_id: str) -> None:
+        self._run("DELETE FROM databases WHERE id = ?", (db_id,))
 
     # -- asks ----------------------------------------------------------------
 

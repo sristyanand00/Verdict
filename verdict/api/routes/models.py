@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+from verdict.api.auth import admin_user
 
 from verdict.api.deps import state
 from verdict.api.schemas import SettingsIn
@@ -36,7 +38,9 @@ def get_settings(request: Request) -> dict:
 
 
 @router.put("/settings")
-def put_settings(body: SettingsIn, request: Request) -> dict:
+def put_settings(body: SettingsIn, request: Request, _: dict = Depends(admin_user)) -> dict:
+    """Settings (current database, model, second model) are shared by every
+    user, so only the provider changes them."""
     s = state(request)
     values = body.model_dump(exclude_none=True)
     if "database_id" in values and s.database(values["database_id"]) is None:

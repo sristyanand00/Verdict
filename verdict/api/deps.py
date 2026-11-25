@@ -14,8 +14,9 @@ def state(request: Request) -> AppState:
     return request.app.state.verdict
 
 
-def get_database(s: AppState, db_id: str) -> Database:
-    db = s.database(db_id)
+def get_database(s: AppState, db_id: str, user: dict | None = None) -> Database:
+    """The database, if ``user`` may use it. Another user's upload is 404."""
+    db = s.database(db_id, user)
     if db is None:
         raise HTTPException(404, f"Unknown database: {db_id}")
     if not db.available:
@@ -29,6 +30,6 @@ def run_sql(db: Database, sql: str) -> ExecutionResult:
 
 
 def tested_trust(s: AppState) -> dict | None:
-    """The tested-trust line, from results.json once the Evaluation chat writes it."""
+    """The tested-trust line, from results.json once the evaluation step writes it."""
     results = s.results_file("results.json")
     return results.get("tested_trust") if isinstance(results, dict) else None

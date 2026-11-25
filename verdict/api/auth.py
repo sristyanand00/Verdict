@@ -90,9 +90,13 @@ class RateLimiter:
     process, which is enough to slow down password guessing.
     """
 
-    def __init__(self, limit: int, window_s: float = 60.0):
+    def __init__(
+        self, limit: int, window_s: float = 60.0,
+        message: str = "Too many tries. Wait a minute and try again.",
+    ):
         self.limit = limit
         self.window_s = window_s
+        self.message = message
         self._hits: dict[str, deque] = defaultdict(deque)
         self._lock = threading.Lock()
 
@@ -105,7 +109,7 @@ class RateLimiter:
             while hits and t - hits[0] > self.window_s:
                 hits.popleft()
             if len(hits) >= self.limit:
-                raise HTTPException(429, "Too many tries. Wait a minute and try again.")
+                raise HTTPException(429, self.message)
             hits.append(t)
 
 

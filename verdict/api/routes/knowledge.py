@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+from verdict.api.auth import admin_user, current_user
 
 from verdict.api.deps import get_database, run_sql, state
 from verdict.api.present import json_rows, result_json
@@ -13,20 +15,24 @@ router = APIRouter()
 
 
 @router.get("/knowledge")
-def get_knowledge(database_id: str, request: Request) -> dict:
-    return state(request).store.knowledge(database_id)
+def get_knowledge(database_id: str, request: Request, user: dict = Depends(current_user)) -> dict:
+    s = state(request)
+    if s.database(database_id, user) is None:
+        raise HTTPException(404, f"Unknown database: {database_id}")
+    return s.store.knowledge(database_id)
 
 
 @router.post("/knowledge/meanings")
-def add_meaning(body: NewMeaningRequest, request: Request) -> dict:
+def add_meaning(body: NewMeaningRequest, request: Request, user: dict = Depends(current_user)) -> dict:
     s = state(request)
-    if s.database(body.database_id) is None:
+    if s.database(body.database_id, user) is None:
         raise HTTPException(404, f"Unknown database: {body.database_id}")
     return s.store.add_meaning(body.database_id, body.term, body.definition, body.sql_hint)
 
 
 @router.delete("/knowledge/{kind}/{item_id}")
-def delete(kind: str, item_id: str, request: Request) -> dict:
+def delete(kind: str, item_id: str, request: Request, _: dict = Depends(admin_user)) -> dict:
+    """Knowledge is shared by everyone on a database, so only the provider deletes it."""
     try:
         deleted = state(request).store.delete_knowledge(kind, item_id)
     except ValueError:
@@ -37,13 +43,13 @@ def delete(kind: str, item_id: str, request: Request) -> dict:
 
 
 @router.post("/knowledge/known/{item_id}/recheck")
-def recheck(item_id: str, request: Request) -> dict:
+def recheck(item_id: str, request: Request, user: dict = Depends(current_user)) -> dict:
     """Run a known number's SQL again and say whether the answer changed."""
     s = state(request)
     k = s.store.get_known_number(item_id)
     if k is None:
         raise HTTPException(404, f"Unknown known number: {item_id}")
-    r = run_sql(get_database(s, k["database_id"]), k["sql"])
+    r = run_sql(get_database(s, k["database_id"], user), k["sql"])
     unchanged = r.ok and same_answer(r, k["columns"], k["value"], k["sql"])
     s.store.mark_known_checked(item_id, unchanged)
     return {
