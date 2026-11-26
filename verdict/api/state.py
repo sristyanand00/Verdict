@@ -167,28 +167,65 @@ class ModelEntry:
     #: True for the user's own model (Qwen, any version). False for outside
     #: models (Gemini and the like), which are only for the Model Arena.
     own: bool = True
+    #: True for a model shown only in the Model Arena, never used for Ask
+    #: (the base Qwen, kept to show what training changed).
+    arena_only: bool = False
+    #: name of the environment variable holding this model's API key, if any
+    api_key_env: str = ""
+
+    @property
+    def role(self) -> str:
+        """"own" (answers analysts), "base" (untrained Qwen, Arena only) or "outside"."""
+        if not self.own:
+            return "outside"
+        return "base" if self.arena_only else "own"
+
+
+#: Outside models reached through an OpenAI-style API. Each one is offered in
+#: the Model Arena only when its API key is set.
+#: id -> (label, key variable, model variable, default model, base url)
+OUTSIDE_OPENAI_MODELS = {
+    "chatgpt": ("ChatGPT (cloud)", "OPENAI_API_KEY", "OPENAI_MODEL", "gpt-4o-mini",
+                "https://api.openai.com/v1"),
+    "groq-llama": ("Llama 3.3 70B (Groq cloud)", "GROQ_API_KEY", "GROQ_MODEL",
+                   "llama-3.3-70b-versatile", "https://api.groq.com/openai/v1"),
+}
 
 
 def default_models() -> list[ModelEntry]:
-    return [
+    """The trained Qwen (answers analysts), the base Qwen and outside models (Arena only)."""
+    qwen_url = os.environ.get("VERDICT_QWEN_URL", "http://127.0.0.1:11434/v1")
+    out = [
         ModelEntry(
             "qwen", "Qwen 1.5B (trained), private", "openai", True,
-            base_url=os.environ.get("VERDICT_QWEN_URL", "http://127.0.0.1:11434/v1"),
-            model=os.environ.get("VERDICT_QWEN_MODEL", "verdict-qwen"),
-        ),
-        ModelEntry(
-            "gemini", "Gemini (cloud)", "gemini", False,
-            model=os.environ.get("GEMINI_MODEL", ""), own=False,
+            base_url=qwen_url, model=os.environ.get("VERDICT_QWEN_MODEL", "verdict-qwen"),
         ),
     ]
+    base = os.environ.get("VERDICT_QWEN_BASE_MODEL", "qwen2.5-coder:1.5b")
+    if base.lower() != "off":
+        out.append(ModelEntry(
+            "qwen-base", "Qwen 1.5B base (not trained)", "openai", True,
+            base_url=qwen_url, model=base, arena_only=True,
+        ))
+    out.append(ModelEntry(
+        "gemini", "Gemini (cloud)", "gemini", False,
+        model=os.environ.get("GEMINI_MODEL", ""), own=False,
+    ))
+    for mid, (label, key_env, model_env, default_model, url) in OUTSIDE_OPENAI_MODELS.items():
+        if os.environ.get(key_env):
+            out.append(ModelEntry(
+                mid, label, "openai", False, base_url=url,
+                model=os.environ.get(model_env, default_model), own=False, api_key_env=key_env,
+            ))
+    return out
 
 
 def load_models() -> list[ModelEntry]:
     """Models from VERDICT_MODELS_FILE if set, else the two defaults.
 
-    File format: a JSON list of {"id", "label", "kind", "private", "base_url", "model", "own"}.
-    "own" defaults to true for kind "openai" (vLLM or Ollama serving Qwen) and
-    false for kind "gemini".
+    File format: a JSON list of {"id", "label", "kind", "private", "base_url", "model", "own",
+    "arena_only", "api_key_env"}. "own" defaults to true for kind "openai" (vLLM or Ollama
+    serving Qwen) and false for kind "gemini".
     """
     path = os.environ.get("VERDICT_MODELS_FILE")
     if not path:
@@ -199,6 +236,7 @@ def load_models() -> list[ModelEntry]:
             m["id"], m.get("label", m["id"]), m["kind"], bool(m.get("private", m["kind"] != "gemini")),
             base_url=m.get("base_url", ""), model=m.get("model", ""),
             own=bool(m.get("own", m["kind"] != "gemini")),
+            arena_only=bool(m.get("arena_only", False)), api_key_env=m.get("api_key_env", ""),
         )
         for m in raw
     ]
@@ -206,7 +244,8 @@ def load_models() -> list[ModelEntry]:
 
 def make_writer(m: ModelEntry) -> SQLWriter:
     if m.kind == "openai":
-        return OpenAICompatWriter(m.base_url, m.model)
+        key = os.environ.get(m.api_key_env) if m.api_key_env else None
+        return OpenAICompatWriter(m.base_url, m.model, api_key=key)
     if m.kind == "gemini":
         return GeminiWriter(model=m.model or None)
     if m.kind == "fixed":
@@ -216,7 +255,7 @@ def make_writer(m: ModelEntry) -> SQLWriter:
 
 def model_reachable(m: ModelEntry) -> bool:
     if m.kind == "openai":
-        return OpenAICompatWriter(m.base_url, m.model).reachable()
+        return make_writer(m).reachable()
     if m.kind == "gemini":
         from dotenv import load_dotenv
 
@@ -254,7 +293,7 @@ class AppState:
     max_concurrent_asks: int = DEFAULT_MAX_CONCURRENT_ASKS
     queue_wait_s: float = DEFAULT_QUEUE_WAIT_S
     # live Model Arena
-    arena_outside_enabled: bool = False
+    arena_outside_enabled: bool = True
     arena_outside_attempts: int = DEFAULT_ATTEMPTS
 
     def __post_init__(self) -> None:
@@ -301,7 +340,7 @@ class AppState:
             ask_rate_per_minute=int(env("VERDICT_ASK_RATE", DEFAULT_ASK_RATE)),
             max_concurrent_asks=int(env("VERDICT_MAX_CONCURRENT_ASKS", DEFAULT_MAX_CONCURRENT_ASKS)),
             queue_wait_s=float(env("VERDICT_QUEUE_WAIT_S", DEFAULT_QUEUE_WAIT_S)),
-            arena_outside_enabled=_on(env("VERDICT_ARENA_OUTSIDE", "off")),
+            arena_outside_enabled=_on(env("VERDICT_ARENA_OUTSIDE", "on")),
             arena_outside_attempts=int(env("VERDICT_ARENA_OUTSIDE_ATTEMPTS", DEFAULT_ATTEMPTS)),
         )
 

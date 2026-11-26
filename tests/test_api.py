@@ -318,9 +318,13 @@ def test_results_and_arena(env):
         {"tested_trust": {"precision": 0.9, "low": 0.87, "high": 0.93, "on": "BIRD dev, 1,534"}}))
     (state.results_dir / "arena.json").write_text(json.dumps({"q1": {"answers": []}}))
     assert client.get("/api/results").json()["tested_trust"]["precision"] == 0.9
-    assert client.get("/api/arena").json() == ["q1"]
-    assert client.get("/api/arena/q1").json() == {"answers": []}
-    assert client.get("/api/arena/q2").status_code == 404
+    # the Arena is for the provider only
+    assert client.get("/api/arena").status_code == 403
+    assert client.get("/api/arena/models").status_code == 403
+    admin = as_admin(client)
+    assert admin.get("/api/arena").json() == ["q1"]
+    assert admin.get("/api/arena/q1").json() == {"answers": []}
+    assert admin.get("/api/arena/q2").status_code == 404
     assert ask(client, "q?")["tested_trust"]["on"] == "BIRD dev, 1,534"
 
 
@@ -356,6 +360,7 @@ def test_serves_built_frontend(tmp_path):
 
 def test_arena_scoreboard_never_fills_numbers(env):
     client, _, state = env
+    client = as_admin(client)
     assert client.get("/api/arena/models").json() == []
     state.results_dir.mkdir(exist_ok=True)
     (state.results_dir / "results.json").write_text(json.dumps({"arena_models": [

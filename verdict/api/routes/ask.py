@@ -58,6 +58,8 @@ def perform_ask(
     model = s.model(model_id or settings["model"])
     if model is None:
         raise HTTPException(400, f"Unknown model: {model_id}")
+    if model.arena_only:
+        raise HTTPException(400, f"{model.label} is only for the Model Arena.")
     if not question or not question.strip():
         raise HTTPException(400, "The question is empty.")
 

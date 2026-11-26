@@ -8,6 +8,9 @@ How Verdict runs in each of its three setups. The same code runs in all of them.
 |---|---|---|
 | `VERDICT_QWEN_URL` | Address of the Qwen server (vLLM or Ollama, OpenAI-compatible) | `http://127.0.0.1:11434/v1` (Ollama on this machine). Use 127.0.0.1, not localhost: on Windows, localhost first tries IPv6 and adds about 2 seconds to every call. |
 | `VERDICT_QWEN_MODEL` | Model name on that server | `verdict-qwen` |
+| `VERDICT_QWEN_BASE_MODEL` | The untrained Qwen shown in the Model Arena next to the trained one. `off` hides it. | `qwen2.5-coder:1.5b` |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | With a key, ChatGPT joins the Model Arena | not set; model `gpt-4o-mini` |
+| `GROQ_API_KEY`, `GROQ_MODEL` | With a key, Llama 3.3 70B on Groq (free tier) joins the Model Arena | not set; model `llama-3.3-70b-versatile` |
 | `VERDICT_MODELS_FILE` | Optional JSON list of models. Replaces the two defaults, for example to list base, SFT and GRPO separately. | not set |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | Only if Gemini is used (cloud mode or second model) | read from `.env` |
 | `VERDICT_ATTEMPTS` | Attempts per question | `8` |
@@ -20,7 +23,6 @@ How Verdict runs in each of its three setups. The same code runs in all of them.
 | `VERDICT_ADMIN_EMAIL`, `VERDICT_ADMIN_PASSWORD` | The provider (admin) account. Made on server start if no account has that email. Without both, no admin is made; there is no default password. Changing the password here later does not change an existing account. | not set |
 | `VERDICT_SIGNUP_CREDITS` | Starting credits for a new account. Set 0 to hand out every credit yourself. | `20` |
 | `VERDICT_PRICE_ASK` | Credits for one question (flat, however many attempts) | `1` |
-| `VERDICT_PRICE_ARENA_OUTSIDE_MODEL` | Credits per outside model in a live Arena run | `1` |
 | `VERDICT_CACHE` | `off` answers every question fresh. When on, a repeated question on the same database is answered from the cache until that database's knowledge changes. | `on` |
 | `VERDICT_UPLOADS` | `off` turns file uploads off (do this on a public server) | `on` |
 | `VERDICT_UPLOAD_TTL_HOURS` | Delete uploaded databases older than this many hours; `0` keeps them | `0` |
@@ -28,7 +30,7 @@ How Verdict runs in each of its three setups. The same code runs in all of them.
 | `VERDICT_ASK_RATE` | Questions per user per minute (429 after that) | `10` |
 | `VERDICT_MAX_CONCURRENT_ASKS` | Fresh questions running at the same time; the rest wait. Keep it low on a CPU-only machine. | `2` |
 | `VERDICT_QUEUE_WAIT_S` | How long a question waits for a free slot before 503 "busy" | `60` |
-| `VERDICT_ARENA_OUTSIDE` | `on` lets the live Model Arena call outside models such as Gemini. Off by default, so no outside API quota or money is used until you turn it on. | `off` |
+| `VERDICT_ARENA_OUTSIDE` | `off` stops the Model Arena from calling outside models (Gemini, ChatGPT, Groq). Only the provider can run the Arena. | `on` |
 | `VERDICT_ARENA_OUTSIDE_ATTEMPTS` | Attempts asked of an outside model in the Arena (8 gives a full verdict; 1 saves quota) | `8` |
 | `VERDICT_AUTH_RATE` | Login and signup tries per minute from one address | `10` |
 | `VERDICT_TRUST_PROXY` | Set to `1` behind Cloudflare Tunnel, so the rate limit sees each visitor's address (`CF-Connecting-IP`) instead of the tunnel's. Leave unset when the server is reached directly. | not set |

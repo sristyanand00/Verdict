@@ -1,6 +1,6 @@
 // Global layout for the working pages: a left sidebar with one flat list of pages,
 // the open review count, the current database and model, and the logged-in account with
-// its credits. The provider (role "admin") also sees the Accounts page.
+// its credits. The provider (role "admin") also sees the Model Arena and Accounts pages.
 
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
@@ -18,7 +18,6 @@ const PAGES: { to: string; label: string }[] = [
   { to: '/review', label: 'Review queue' },
   { to: '/knowledge', label: 'Knowledge' },
   { to: '/trust', label: 'Trust Report' },
-  { to: '/arena', label: 'Model Arena' },
 ]
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -66,6 +65,9 @@ export function AppShell() {
           {me?.user.role === 'admin' && (
             <>
               <div className="mx-3 my-3 h-px bg-line" />
+              <NavLink to="/arena" className={linkClass}>
+                Model Arena
+              </NavLink>
               <NavLink to="/admin" className={linkClass}>
                 Accounts
               </NavLink>

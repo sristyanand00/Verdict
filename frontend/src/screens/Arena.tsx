@@ -34,7 +34,8 @@ function asRun(x: unknown): { question?: string; results: ArenaRunResult[] } | n
 
 function robotKind(m: { model_id?: string; id?: string; kind: ModelInfo['kind'] }): RobotKind {
   if (m.kind === 'outside') return 'cloud'
-  return (m.model_id ?? m.id ?? '').includes('base') ? 'base' : 'grpo'
+  if (m.kind === 'base') return 'base'
+  return 'grpo'
 }
 
 function mood(r: ArenaRunResult | undefined, running: boolean): RobotMood {
@@ -67,10 +68,11 @@ export default function Arena() {
       .models()
       .then((list) => {
         setModels(list)
-        // start with every own model and the first outside model, up to the limit
+        // start with the trained model, the base model and the outside models, up to the limit
         const own = list.filter((m) => m.kind === 'own').map((m) => m.id)
-        const outside = list.filter((m) => m.kind === 'outside').map((m) => m.id)
-        setPicked([...own, ...outside.slice(0, 1)].slice(0, MAX_MODELS))
+        const base = list.filter((m) => m.kind === 'base').map((m) => m.id)
+        const outside = list.filter((m) => m.kind === 'outside' && m.reachable).map((m) => m.id)
+        setPicked([...own, ...base, ...outside].slice(0, MAX_MODELS))
       })
       .catch((e) => setModelsError(e instanceof Error ? e.message : 'Could not load the models'))
     api
@@ -192,7 +194,7 @@ export default function Arena() {
                   <input type="checkbox" checked={on} disabled={running || full} onChange={() => toggle(m.id)} className="accent-[var(--color-brand)]" />
                   <span>{m.label}</span>
                   <span className="text-xs text-muted">
-                    {m.kind === 'own' ? 'your model, free' : isAdmin ? 'outside' : `outside, ${price} ${price === 1 ? 'credit' : 'credits'}`}
+                    {m.kind === 'own' ? 'trained, your product' : m.kind === 'base' ? 'before training' : isAdmin ? 'outside' : `outside, ${price} ${price === 1 ? 'credit' : 'credits'}`}
                   </span>
                   {!m.reachable && <span className="text-xs text-lv-yellow">not reachable</span>}
                 </label>
@@ -284,7 +286,7 @@ export default function Arena() {
                 <tr key={`${s.model_id}-${s.benchmark}`} className="border-b border-line/60">
                   <td className="py-2.5 pr-4">
                     <span className="text-ink">{s.label}</span>
-                    <span className="ml-2 text-xs text-muted">{s.kind === 'own' ? 'your model' : 'outside'}</span>
+                    <span className="ml-2 text-xs text-muted">{s.kind === 'own' ? 'your model' : s.kind === 'base' ? 'before training' : 'outside'}</span>
                   </td>
                   <td className="py-2.5 pr-4 text-muted">{s.benchmark}</td>
                   <td className="py-2.5 pr-4 text-right font-mono tabular-nums text-muted">{s.n_questions.toLocaleString('en-US')}</td>
@@ -324,7 +326,7 @@ function ModelColumn({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="truncate font-semibold">{label}</div>
-            <div className="text-xs text-muted">{kind === 'own' ? 'Your model' : 'Outside model'}</div>
+            <div className="text-xs text-muted">{kind === 'own' ? 'Your trained model' : kind === 'base' ? 'Base model, before training' : 'Outside model'}</div>
           </div>
           {result?.status === 'ok' && result.level && <LevelBadge level={result.level} />}
         </div>

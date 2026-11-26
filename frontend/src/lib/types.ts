@@ -242,7 +242,9 @@ export type AdminUserRow = User & {
 }
 
 // models and the Model Arena
-export type ModelKind = 'own' | 'outside' // own: the user's Qwen model. outside: Gemini and others, Arena only
+// own: the trained Qwen that answers analysts. base: the untrained Qwen, Arena only.
+// outside: Gemini, ChatGPT and others, Arena only.
+export type ModelKind = 'own' | 'base' | 'outside'
 
 export type ModelInfo = {
   id: string

@@ -72,8 +72,11 @@ class GeminiWriter:
             raise LLMError("GEMINI_API_KEY is not set. Add it to the .env file.")
 
         from google import genai  # imported here so tests never need the SDK
+        from google.genai import types
 
-        self._client = genai.Client(api_key=api_key)
+        # A call that hangs (free tier under load) fails after a minute instead
+        # of holding the whole question until its time limit.
+        self._client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=60_000))
         self.model = model or os.environ.get("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
         self.temperature = temperature
         self.cache_dir = Path(cache_dir) if cache_dir else None
@@ -168,7 +171,8 @@ class OpenAICompatWriter:
         self.api_key = api_key
 
     def _headers(self) -> dict[str, str]:
-        h = {"Content-Type": "application/json"}
+        # Cloud APIs behind Cloudflare (Groq) refuse Python's default User-Agent.
+        h = {"Content-Type": "application/json", "User-Agent": "verdict/1.0"}
         if self.api_key:
             h["Authorization"] = f"Bearer {self.api_key}"
         return h

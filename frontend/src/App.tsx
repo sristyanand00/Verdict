@@ -59,7 +59,14 @@ export default function App() {
             <Route path="/review/:id" element={<ReviewDetail />} />
             <Route path="/knowledge" element={<Knowledge key="learned" mode="learned" />} />
             <Route path="/trust" element={<TrustReport />} />
-            <Route path="/arena" element={<Arena />} />
+            <Route
+              path="/arena"
+              element={
+                <RequireAdmin>
+                  <Arena />
+                </RequireAdmin>
+              }
+            />
             <Route path="/account" element={<Account />} />
             <Route
               path="/admin"

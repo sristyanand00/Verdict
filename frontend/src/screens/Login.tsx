@@ -15,6 +15,7 @@ export default function Login({ mode }: { mode: 'login' | 'signup' }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -51,13 +52,17 @@ export default function Login({ mode }: { mode: 'login' | 'signup' }) {
           <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" required />
           <Field
             label="Password"
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={setPassword}
             autoComplete={signingUp ? 'new-password' : 'current-password'}
             minLength={signingUp ? 8 : undefined}
             required
           />
+          <label className="-mt-2 flex items-center gap-2 text-sm text-muted">
+            <input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} />
+            Show password
+          </label>
           {error && <p className="text-sm text-lv-red">{error}</p>}
           <button type="submit" disabled={busy} className="mt-2 rounded-md bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand disabled:opacity-50">
             {busy ? 'Please wait...' : signingUp ? 'Create account' : 'Log in'}
