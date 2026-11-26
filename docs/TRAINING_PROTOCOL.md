@@ -577,7 +577,7 @@ Outputs:
 - `results/training_results.json` with the settings, split sizes, per-epoch
   rewards and accuracies.
 
-See `KAGGLE_QUICK_START.md` for the notebook cells.
+The commands for the college PC are in `docs/TRAINING_RUNBOOK.md`.
 
 ---
 

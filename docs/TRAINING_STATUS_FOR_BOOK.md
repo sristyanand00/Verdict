@@ -1,7 +1,7 @@
 # Training status for the study book
 
-Written 25 Nov 2026 by the Training session (commit ids updated 26 Nov after the history rewrite), from the files in this repo and the run
-outputs the user pasted into the Training chat. Nothing here is estimated unless it says so.
+Written 25 Nov 2026 by the Training part (commit ids updated 26 Nov after the history rewrite), from the files in this repo and the run
+outputs the user reported from the college PC. Nothing here is estimated unless it says so.
 
 **Where the facts come from.** The training runs happen on the college PC (RTX 3060 12 GB).
 Its logs and result files (`E:\verdict_runs\...`) are **not on the laptop**: `results/college/`
@@ -9,11 +9,11 @@ does not exist yet. So the sources are:
 
 - repo files and git history (exact);
 - `docs/TRAINING_RUNBOOK.md` section 10, filled in from the college PC results (exact as written there);
-- console output from the college PC that the user pasted into the Training chat (marked
+- console output from the college PC that the user reported (marked
   "pasted output"). The original log files are on the PC; they should be copied to
   `results/college/` and checked against this page.
 
-The last report from the college PC reached the Training chat on **24 Nov 2026, about 14:00**.
+The last report from the college PC came on **24 Nov 2026, about 14:00**.
 Anything that may have run after that is marked **unclear**.
 
 ---
@@ -63,9 +63,17 @@ samples at a time) instead of crashing. Test: `tests/test_rollout.py::test_out_o
 
 **Restarted run** (same command plus `--resume`)
 
-| Item | Value |
-|---|---|
-| Started? finished? | unclear: the restart command was given on 24 Nov; no output from it has reached the Training chat |
+| Item | Value | Date | Source |
+|---|---|---|---|
+| Progress before the PC was switched off | 1392 questions in `pass_rates.jsonl` (464 earlier + 928 in this run, last progress line "measured 928/1536 (441 min)"); last line complete, nothing lost | 25-26 Nov | pasted PC output (line count, last line, log tail), 26 Nov |
+| Seconds per question in this run | about 28.5 s on average (928 in 441 min) | 25-26 Nov | same log tail |
+| Final step | `--resume --time-limit-hours 0.01`: "608 questions to measure (1392 already done)", measured 16 more, exit code 2 (time limit, intended), 1.6 min | 26 Nov 11:38-11:40 | pasted PC output |
+| **Result** | **1408 measured: never solved 288 (20.5%), always solved 352 (25.0%), sometimes solved 768 (54.5%) = kept for GRPO** | 26 Nov | pasted PC output |
+| Spread of the 768 kept (1..7 of 8) | not yet reported | | |
+| Why not all 2000 | decided 26 Nov: 768 kept questions are enough for one GRPO epoch; the other 592 would cost about 4-5 h of GPU | | user decision |
+
+---|---|
+| Started? finished? | unclear: the restart command was given on 24 Nov; no output from it has been reported |
 | Questions measured, kept, spread (1..7 of 8) | unclear |
 | Seconds per question | unclear for this run (first run: about 30-33 s) |
 
@@ -75,7 +83,7 @@ samples at a time) instead of crashing. Test: `tests/test_rollout.py::test_out_o
 
 | Item | Value |
 |---|---|
-| 20-question quick check | unclear (planned; not reported as run). Peak GPU memory and OOM: unclear |
+| 20-question quick check | done 26 Nov 11:47-12:12, exit 0, 25.3 min, no out-of-memory with the default settings (batch 4, micro-batch 4, 8 samples, schema 12000) on the RTX 3060. Validation (100 held-out questions, greedy): 47.0% correct / 80.0% ran before, 47.0% / 83.0% after (5 updates only, no change expected). Batches (correct of 32, ran of 32, seconds): 21/27 187 s, 21/32 131 s, 22/32 79 s, 21/32 67 s, 20/21 98 s; epoch 563 s, i.e. about 112 s per batch of 4 questions. Mean reward 0.680 (sd 0.443), sampled train accuracy 65.6%. Each validation pass takes 449-488 s. Peak GPU memory not recorded | pasted PC output, 26 Nov |
 | Full GRPO v1 | unclear; last known state on 24 Nov: not started (it needs `kept_ids.json` from the pass rate) |
 | Per-epoch reward, ran share, correct share, validation accuracy | not available (no GRPO v1 run reported) |
 | Reward hacking signs on 1.5B | not available (no 1.5B GRPO run reported) |
@@ -107,7 +115,7 @@ source `docs/TRAINING_PROTOCOL.md` sections 9.4-9.5):
 | Learning rate | 1e-5 | runbook step D (`--lr 1e-5`); also `LORA_LR` in `scripts/train_grpo.py` |
 | Questions per batch | 4 | `GRPOTrainingConfig.batch_size`, `verdict/train/grpo.py` |
 | Group size (samples per question) | 8 | `num_generations` |
-| Epochs | code default 3; the Training chat recommended `--epochs 1` because of time (not yet in the runbook command) | `grpo.py`; `docs/TRAINING_SESSION_HANDOFF.md` |
+| Epochs | code default 3; the Training plan recommends `--epochs 1` because of time (not yet in the runbook command) | `grpo.py`; `docs/TRAINING_SESSION_HANDOFF.md` |
 | LoRA rank | 16 (alpha 32), taken from the SFT v2 adapter | runbook / handoff |
 | Reward | "sparse": 1.0 correct, 0.1 ran but wrong, 0.0 did not run | `REWARD_SCHEMES` in `verdict/train/reward.py` |
 | Reward query timeout | 5 s (code default `reward_timeout_s`; `train_grpo.py` has no flag for it). Note: the dev evaluation uses 30 s | `grpo.py`, `reward.py` |
@@ -135,11 +143,11 @@ error types: not available. Planned command: runbook step D (eval with `--baseli
 
 | Item | Value | Source |
 |---|---|---|
-| Merge (LoRA into base, fp16) | unclear: commands were given on 24 Nov, no result reported | runbook section 9 |
-| GGUF conversion | unclear (planned `q8_0`, expected about 1.6 GB; not measured) | runbook section 9 |
-| Ollama build | not run on the laptop: Ollama is not installed there (`where ollama` finds nothing, 25 Nov) | this check |
+| Merge (LoRA into base, fp16) | done 26 Nov about 11:48, on the CPU, about 1 min: `E:\verdict_runs\export\sft_v2\merged` and `Modelfile` | pasted PC output, 26 Nov |
+| GGUF conversion | done 26 Nov: `verdict-qwen.gguf`, q8_0, 338 tensors, 1.64 GB (llama.cpp `convert_hf_to_gguf.py`, gguf 0.19.0). First try failed at the tokenizer step (`No module named 'sentencepiece'`); fixed with `pip install sentencepiece protobuf`. Warning "Unknown RoPE type: default" (harmless) | pasted PC output, 26 Nov |
+| Ollama build | done 26 Nov on the laptop: Ollama installed, `ollama create verdict-qwen -f Modelfile` succeeded, model `verdict-qwen:latest`, 1.6 GB | this session, 26 Nov |
 | 50-question parity check | not run | |
-| Laptop speed (1 answer, 8 answers) | not run | |
+| Laptop speed (1 answer, 8 answers) | smoke test only (one toy 2-table schema, 159 prompt tokens, about 42 answer tokens; laptop i5-1135G7, 8 GB RAM, no GPU): first call with loading 14.1 s; one greedy answer 7.0 s; 8 sampled answers one after another 41.8 s. Answer was a correct-looking join with COUNT. Real BIRD schemas are much longer, so real times will be higher; not measured yet | this session, 26 Nov |
 
 Code exists and is tested only for the Modelfile text (`tests/test_export_model.py`); the merge
 itself has not been run on the laptop.
@@ -150,7 +158,7 @@ itself has not been run on the laptop.
 
 | Item | Value |
 |---|---|
-| 8 samples per dev question for the trust run | not run (script not written yet; output format to come from the Evaluation session) |
+| 8 samples per dev question for the trust run | not run (script not written yet; output format to come from the Evaluation part) |
 | Gemini / GPT comparison on BIRD dev | not run (script not written yet) |
 | Untrained 7B evaluation | not run (needs a 4-bit loading option; waiting for the user's decision) |
 
@@ -183,7 +191,7 @@ ratio and clipping are left out (`verdict/train/grpo.py`). The book should not c
 **Qwen2.5-Coder and not Llama, DeepSeek-Coder or Phi.**
 Partly documented, as planning notes (not measurements): `VERDICT-MASTER-CONTEXT.md` says Qwen2.5-Coder
 has the "best SQL ability of the small ones" and lists Llama-3.1-8B as "weaker at SQL than Qwen-Coder".
-DeepSeek-Coder and Phi: not documented. The size (1.5B and not 7B) is explained in `docs/HANDOFF.md` (deleted 25 Nov in `ed0a08a`; the text was):
+DeepSeek-Coder and Phi: not documented. The size (1.5B and not 7B) was explained in an older handoff note (removed 25 Nov in `ed0a08a`; the text was):
 the private mode runs on the laptop, where a 7B GGUF is about 4.5 GB and slower. The same master context
 also warns that RL gains on Qwen models may partly come from the model and not the reward (marked
 unverified there), and suggests a random-reward control run; that run has not been done.
@@ -219,7 +227,7 @@ Times are planning estimates, not measurements.
 5. Export SFT v2: merge about 5 min, GGUF conversion about 10-20 min, copy to the laptop, install Ollama,
    `ollama create`: about 1 h in total. Then the 50-question parity check and speed numbers: about 1 h.
    Repeat for GRPO v1 if it is better.
-6. Script for 8 samples per dev question (for the Evaluation session): about 2 h to write and test, then
+6. Script for 8 samples per dev question (for the Evaluation part): about 2 h to write and test, then
    about 3-4 h of GPU time (based on 12.6-30 s per question for 8 samples on the training set; dev not measured).
 7. Gemini / GPT comparison script and run: about 2 h to write, run time depends on API limits.
 8. Optional untrained 7B eval (4-bit): about 2 h of code, 15 GB download, 3-5 h of GPU. Competes with GRPO

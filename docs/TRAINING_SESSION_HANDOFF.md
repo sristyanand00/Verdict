@@ -1,6 +1,6 @@
-# Training session handoff (updated 26 Nov 2026)
+# Training handoff (updated 26 Nov 2026)
 
-Context for a new Claude session that takes over the **Training** work of Verdict.
+Context for whoever takes over the **Training** work of Verdict.
 Read, in this order:
 
 1. this file;
@@ -10,8 +10,8 @@ Read, in this order:
 5. `docs/TRAINING_PROTOCOL.md` (method, settings, the Phase 1 Kaggle results).
 
 `VERDICT-MASTER-CONTEXT.md` (15 Sept) is history only: it describes an older framing and planned
-Unsloth + vLLM, which the code does not use. `docs/HANDOFF.md`, `docs/WEEK4-TRAINING-GUIDE.md` and
-the numbered docs 01-25 were deleted on 25 Nov (commit `ed0a08a`); their useful facts are in the files above.
+Unsloth + vLLM, which the code does not use. Older guides were removed on 25 Nov (commit `ed0a08a`);
+their useful facts are in the files above.
 
 ---
 
@@ -27,7 +27,7 @@ The Training part: fine-tune **Qwen2.5-Coder-1.5B-Instruct** on BIRD (LoRA SFT, 
 execution reward), export it for Ollama on the laptop, and compare fairly on all **1,534 BIRD dev
 questions** with identical settings: base, SFT, SFT+GRPO, optionally an untrained 7B, Gemini and GPT.
 
-Five parallel Claude sessions; each owns its files. Never edit, stage, revert or delete another's files.
+The project has five parts; each owns its files. Never edit, stage, revert or delete another part's files.
 
 - **Training (this one):** `verdict/train/`, `scripts/train_sft.py`, `scripts/train_grpo.py`,
   `scripts/train_run.py`, `scripts/pass_rate.py`, `scripts/evaluate.py`, `scripts/export_model.py`,
@@ -40,11 +40,10 @@ Five parallel Claude sessions; each owns its files. Never edit, stage, revert or
 - **Evaluation:** `verdict/eval`, `results/`, `thresholds.json`.
 - **Data / demo / testing:** `datasets/olist`, demo questions, slides, plan and review docs, LOG.md housekeeping.
 
-There is also a **knowledge chat** that writes a study book on Verdict ("The Verdict Book",
-`docs/VERDICT-BOOK.html` / `.pdf`). It takes its training facts only from `docs/TRAINING_STATUS_FOR_BOOK.md`,
-so keep that file correct after every result.
+There is also a study book on Verdict ("The Verdict Book", `docs/VERDICT-BOOK.html` / `.pdf`). It takes
+its training facts only from `docs/TRAINING_STATUS_FOR_BOOK.md`, so keep that file correct after every result.
 
-The laptop working tree usually has uncommitted files from other sessions. Commit only your own
+The laptop working tree usually has uncommitted files from other parts. Commit only your own
 files, by path (`git add <paths>`), never `git add -A`.
 
 ## 2. Time
@@ -57,25 +56,24 @@ numbers, then extras.
 ## 3. How the user works (important)
 
 - Two machines:
-  - **Laptop** (this repo, `c:\Users\Dell\OneDrive\Desktop\verdict`, Windows 11): Claude writes and tests
-    code here, commits and **pushes** training files (the user has authorized this). Remote:
+  - **Laptop** (this repo, `c:\Users\Dell\OneDrive\Desktop\verdict`, Windows 11): code is written and tested
+    here, and training files are committed and pushed from here (only after the user says yes). Remote:
     `https://github.com/sristyanand00/Verdict.git`.
   - **College PC** (Windows 11, RTX 3060 **12 GB**, only the **E:** drive may be used): repo `E:\verdict`,
     venv `E:\verdict\.venv`, BIRD at `E:\bird\train_dir` and the dev set, outputs in `E:\verdict_runs\...`.
     The PC has no GitHub login: it only does `git pull`.
-- On the college PC a **browser Claude** ("computer wala agent") helps the user. The usual output from
-  this session is a **copy-paste prompt for that agent, in English**, with exact commands, what to check,
-  and what to report back. The user re-uploads the runbook to it after each push.
+- Work for the college PC is handed over as a **copy-paste block in English**, with exact commands, what
+  to check, and what to report back. After each push the PC needs `git pull` to get the new runbook.
 - Results and big files travel PC -> laptop by Google Drive or pen drive into `results\college\`
   (does not exist yet; nothing from the PC has been copied so far).
 - **Never commit** weights, adapters, GGUF files, large jsonl files, `.env` files or API keys. API keys only
-  as environment variables, never in files under `E:\verdict`, never pasted in chat.
+  as environment variables, never in files under `E:\verdict`, never pasted in messages.
 - Shared college PC: never delete other people's files; log out of Google Drive when done.
 - Talk to the user in **plain, short, simple Hinglish**, one step at a time, no dense tables.
 - No emojis or stickers in code, logs, notebook cells or commit messages.
-- **Commit messages: plain, with no `Co-Authored-By: Claude` line and no other AI attribution.**
-  The user saw "claude" listed as a GitHub contributor and removed it by rewriting history (all commit
-  ids changed on 25-26 Nov; the ids below are the new ones).
+- **Commit messages: plain, with no `Co-Authored-By` line and no other attribution line.**
+  The history was rewritten on 25-26 Nov to remove such lines (all commit ids changed; the ids below
+  are the new ones).
 - Keep the user's personal details private (no email in any external request).
 
 ## 4. Fixed settings (use the same everywhere)
@@ -113,7 +111,7 @@ numbers, then extras.
   (`--num-tasks 2000 --gen-batch 2 --time-limit-hours 9`) crashed after **48/2000** with CUDA out of memory
   (tried to allocate 12.08 GiB in attention prefill; 2 questions x 8 samples with one very long prompt),
   exit 1 after 33.8 min, about 30-33 s per question. Fixed in `e9f3a5b`.
-- `docs/TRAINING_STATUS_FOR_BOOK.md` written (25 Nov) for the knowledge chat.
+- `docs/TRAINING_STATUS_FOR_BOOK.md` written (25 Nov) for the study book.
 
 Training commits (new ids after the history rewrite, newest first):
 
@@ -128,7 +126,7 @@ Training commits (new ids after the history rewrite, newest first):
 - `eba24b2` `train_run.py`: a leading `python` runs with `sys.executable` (the venv).
 - `1f2aea8`, `38778b9`, `ed315e4`: live logs, bf16, schema flag, batched generation, eval timeout and rescore, runbook.
 
-Other sessions since then (for context, not yours): accounts and credits (`f11fe01`), receipt check status
+Other parts since then (for context, not yours): accounts and credits (`f11fe01`), receipt check status
 "info" (`0131635`), verifier fix for slow child exit (`6d5ed8f`), answer cache, faster Ollama calls and a demo
 cache script `scripts/warm_cache.py` (`3904f9b`), limits for a public server (`adb8c58`), cleanup of unused
 files and README fixed to no longer claim Unsloth/vLLM (`ed0a08a`).
@@ -137,7 +135,7 @@ Laptop tests on 24 Nov: 272 passed, 4 skipped (the laptop's main Python needed `
 
 ## 6. Current state (unclear parts)
 
-The last output from the college PC reached the Training chat on **24 Nov around 14:00**. Since then:
+The last output from the college PC was reported on **24 Nov around 14:00**. Since then:
 
 - The pass rate was to be restarted with the same command plus `--resume`:
   ```
@@ -145,8 +143,9 @@ The last output from the college PC reached the Training chat on **24 Nov around
   ```
   Its start should say "1952 questions to measure (48 already done)". Whether it ran and what it produced:
   **unclear**. Expected: about 1,000 questions in 9 h, about 500-600 kept; exit code 2 = time limit (fine).
-- GGUF export: commands given, result **unclear**. Ollama is **not installed** on the laptop (25 Nov), so no
-  real end-to-end ask with the own model has run yet (`docs/PROJECT-CONTEXT.md` section 7 lists this as a blocker).
+- GGUF export: commands given, result **unclear**. Ollama is installed on the laptop (26 Nov, it has
+  `qwen2.5-coder:1.5b`) but `verdict-qwen` is not created yet, so no real end-to-end ask with the own model
+  has run yet (`docs/PROJECT-CONTEXT.md` section 7 lists this as a blocker).
 
 First thing to do: ask the user for the pass rate summary and the export state, and to copy
 `E:\verdict_runs\logs\`, `E:\verdict_runs\pass_rate\` and `E:\verdict_runs\eval\*.jsonl` into `results\college\`.
@@ -159,7 +158,7 @@ First thing to do: ask the user for the pass rate summary and the export state, 
    - `python E:\llama.cpp\convert_hf_to_gguf.py E:\verdict_runs\export\sft_v2\merged --outfile E:\verdict_runs\export\sft_v2\verdict-qwen.gguf --outtype q8_0` (~1.6 GB)
    - Bring `verdict-qwen.gguf` + `Modelfile` to the laptop, install Ollama, `ollama create verdict-qwen -f Modelfile`.
    - Check on the laptop: 50 dev questions through Ollama should match the PC eval closely; record seconds for
-     1 answer and for 8 answers. Tell Backend: model `verdict-qwen` at `http://localhost:11434/v1`, prompt must match.
+     1 answer and for 8 answers. Tell Backend: model `verdict-qwen` at `http://127.0.0.1:11434/v1`, prompt must match.
    - `docs/DEPLOYMENT.md` (Backend's file) still says "Q4 or Q5"; ask Backend to change it to q8_0 once done.
      Why q8_0 was picked is not written down anywhere: write the reason in the runbook when you decide it.
 2. **Pass rate result** -> check `kept_ids.json` exists and is not empty; record measured, kept, and the spread
@@ -179,7 +178,7 @@ First thing to do: ask the user for the pass rate summary and the export state, 
    python scripts/train_run.py E:\verdict_runs\logs\eval_grpo_v1.log python scripts/evaluate.py --model E:\verdict_runs\grpo_v1\best --label grpo_v1 --max-schema-chars 12000 --timeout 30 --workers 4 --gen-batch 8 --baseline E:\verdict_runs\eval\eval_sft_v2.jsonl
    ```
    If better than SFT v2, export it too and it becomes Version 2.
-6. **Scripts promised to the Evaluation session:** 8 samples per dev question for the trust run (format from
+6. **Scripts promised to the Evaluation part:** 8 samples per dev question for the trust run (format from
    Eval), and a Gemini / GPT comparison on the same 1,534 questions with the same prompt and scoring
    (keys from environment variables).
 7. **Optional untrained 7B eval** (waiting for the user's yes/no): 4-bit loading via bitsandbytes (add a
@@ -194,7 +193,7 @@ First thing to do: ask the user for the pass rate summary and the export state, 
   text before copying, or copy from a second window.
 - Long prompts x many samples can need more than 12 GB; generation now splits itself, the backward pass does not.
 - Writing Windows paths through a Python heredoc turns `\v`, `\b`, `\n` into escapes; use a quoted heredoc or the Write tool.
-- If the browser agent says a new script is missing, the PC has not done `git pull` yet.
+- If a new script is missing on the college PC, it has not done `git pull` yet.
 - "8 answers and a score" was only GRPO practice on 0.5B on Kaggle; on 1.5B, pass rate and GRPO are first runs.
 - Do not report anything to the book that did not come from a file or a pasted output; mark the rest "unclear".
 

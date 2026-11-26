@@ -1,24 +1,24 @@
 # Verdict training runbook (college PC, 19 Nov to 5 Dec 2026)
 
-This file is the full plan for the training part of Verdict, written so that a
-new Claude Code session on the college PC can pick it up and run it with the
+This file is the full plan for the training part of Verdict, written so that
+anyone who takes over the training work can pick it up and run it with the
 user. Read this file first, then `docs/TRAINING_SESSION_HANDOFF.md` (what was done before) and
 `docs/TRAINING_PROTOCOL.md` (method and all numbers so far).
 
 ---
 
-## 0. Rules for the Claude session running this
+## 0. Rules for whoever runs this
 
 - Explain to the user in **Hinglish**, in plain, short, simple words. One step
-  at a time. No dense tables in chat.
+  at a time. No dense tables in messages.
 - **No emoji or "sticker" characters** anywhere: code, logs, notebook cells,
   commit messages. No AI attribution lines in commits.
 - Commit or push **only when the user asks**.
 - Stay inside the training files: `verdict/train/`, `scripts/train_*.py`,
   `scripts/pass_rate.py`, `scripts/evaluate.py`, `docs/TRAINING_PROTOCOL.md`,
-  this file, and `results/training/`. Other folders belong to other chats
-  (frontend, backend, eval, data/demo). If something there must change, tell
-  the user which chat should do it.
+  this file, and `results/training/`. Other folders belong to other parts of
+  the project (frontend, backend, evaluation, data and demo). If something
+  there must change, tell the user which part should do it.
 - After each finished step, add one line to `LOG.md` and update the status
   table in section 10 of this file.
 - The college PC is shared. **Work only on drive E:.** C: had only 80 MB free
@@ -220,7 +220,7 @@ Items 5 and 6 are still open. The original list:
 6. **The 2 "blocked" queries** from SFT validation: find which keyword the
    filter caught. If it is a harmless word in a column name or string, report
    it to the user. The filter lives in `verdict/verifier/safety.py`, which is
-   not a training file, so the fix belongs to the backend chat.
+   not a training file, so the fix belongs to the Backend part.
 
 ---
 
@@ -228,8 +228,8 @@ Items 5 and 6 are still open. The original list:
 
 ### How to run anything long
 
-Long runs must keep going if the Claude session closes. So the user starts
-them in a **separate PowerShell window** (not the one Claude uses), does the
+Long runs must keep going if the working terminal closes. So the user starts
+them in a **separate PowerShell window** (not the one used for other commands), does the
 "every new terminal" lines from section 4, then puts
 `python scripts/train_run.py <log file>` in front of the command. The output
 then shows live on screen **and** is saved to the log:
@@ -338,7 +338,7 @@ honestly.
 
 The best of SFT v2 and GRPO v1 is **Version 1**. Copy its adapter off the
 machine (Google Drive, pen drive or a private Hugging Face repo) and tell the
-user, so the eval chat can start the trust-engine runs and calibration.
+user, so the Evaluation part can start the trust-engine runs and calibration.
 
 ---
 
@@ -349,8 +349,8 @@ Choose with the user after Version 1's numbers. Run one or both:
 - **Path A: more data, same 1.5B.** BIRD train plus Spider train (about
   7,000 questions, different databases) and, if time allows, a filtered subset
   of a public synthetic text-to-SQL set. SFT again, then GRPO. Expected gain
-  about 3 to 6 points. Needs a loader for Spider in `verdict/data/` (data chat
-  or training chat, agree with the user).
+  about 3 to 6 points. Needs a loader for Spider in `verdict/data/` (Data part
+  or Training part, agree with the user).
 - **Path B: Qwen2.5-Coder-3B-Instruct.** Fits on 12 GB with LoRA and gradient
   checkpointing (use `--micro-batch-size 1` if needed). Expected about 5 to 8
   points over 1.5B. Laptop GGUF about 2 GB, so private mode still works, just
@@ -384,7 +384,7 @@ environment variables, never in files. Check current prices before running;
 1,534 calls per model should be cheap.
 
 Save the small summary files in `results/training/` in the repo (big `.jsonl`
-files stay on E: and in backup). The eval chat builds `results.json` for the
+files stay on E: and in backup). The Evaluation part builds `results.json` for the
 dashboard from these.
 
 ### Packaging for the laptop (moved up: needed for the 26 Nov demo)
@@ -404,6 +404,7 @@ python scripts/export_model.py --adapter E:\verdict_runs\sft_v2\best --out E:\ve
 ```
 git clone --depth 1 https://github.com/ggml-org/llama.cpp E:\llama.cpp
 pip install E:\llama.cpp\gguf-py
+pip install sentencepiece protobuf
 cd E:\verdict
 python E:\llama.cpp\convert_hf_to_gguf.py E:\verdict_runs\export\sft_v2\merged --outfile E:\verdict_runs\export\sft_v2\verdict-qwen.gguf --outtype q8_0
 ```
@@ -413,12 +414,20 @@ python E:\llama.cpp\convert_hf_to_gguf.py E:\verdict_runs\export\sft_v2\merged -
 
 ```
 ollama create verdict-qwen -f Modelfile
-ollama run verdict-qwen "hello"
+ollama run verdict-qwen "SELECT 1"
 ```
+
+   The backend then needs only `VERDICT_QWEN_MODEL=verdict-qwen` in `.env`
+   (the Ollama address is the default `http://127.0.0.1:11434/v1`).
+
+   Why q8_0: the 1.5B model is small, so 8-bit is still only about 1.6 GB and
+   runs fine on the laptop, while 4-bit loses more quality on small models.
+   This is a judgment, not a measurement; the 50-question check in step 5
+   is the real test.
 
 4. The app must send the training prompt (system instruction and the
    "### Database Schema / ### Question / ### Hint" layout from
-   `verdict/train/data_prep.py`). Tell the Backend session.
+   `verdict/train/data_prep.py`). Tell the Backend part.
 5. Later: check that Ollama answers match the Hugging Face model on 50 dev
    questions, and measure seconds per answer on the laptop.
 
@@ -434,10 +443,10 @@ ollama run verdict-qwen "hello"
 | A. Base v2 eval | done | 23 Nov | 24.6% (range 22.6-26.9), ran 54.9%, 47.6 min |
 | B. SFT v2 | done | 19 to 23 Nov | 1146/1146 steps, resumed at 500; validation 23.0% to 49.5% (79.0% ran) |
 | B. SFT v2 eval | done | 24 Nov | 43.5% (range 41.0-46.0), ran 87.9%; simple 52.0, moderate 33.0, challenging 22.8; vs base +353 / -64, net +289; 38.4 min |
-| C. Pass rate | first run stopped (out of memory); restart unclear | 24 Nov | test: 20 questions in 4.2 min, 5 never / 4 always / 11 kept. Full run (--num-tasks 2000 --gen-batch 2): 48/2000 measured, then CUDA out of memory (tried 12.08 GiB), exit 1 after 33.8 min, about 30-33 s per question. Fixed in e9f3a5b; restart with --resume given 24 Nov, no result reported yet |
-| D. GRPO v1 | not started (as last reported, 24 Nov) | | needs kept_ids.json; plan: 20-question check, then --epochs 1 |
+| C. Pass rate | done (stopped early on purpose) | 24 to 26 Nov | 1408 of 2000 measured: never 288, always 352, kept 768 (kept_ids.json). First run OOM at 48 (fixed e9f3a5b); resumed run reached 1392 (464 + 928 in about 441 min) when the PC was switched off on 25-26 Nov; nothing lost. 26 Nov: --resume --time-limit-hours 0.01 measured 16 more (1.6 min incl. loading) and wrote kept_ids.json. Remaining 592 not measured (768 kept is enough for one GRPO epoch) |
+| D. GRPO v1 | quick check done; full run starting | 26 Nov | check: 20 questions, 25.3 min, exit 0, no OOM, val 47.0% -> 47.0% (ran 80 -> 83%), about 112 s per batch of 4. Full run: 768 kept = 192 batches, estimate 6-6.5 h incl. two validation passes |
 | D. GRPO v1 eval | not run | | |
-| Version 1 handed over | SFT v2 as Version 1 for now | 24 Nov | adapter zip E:\sft_v2_best.zip (206 MB); GGUF export: merge and conversion unclear (not reported), Ollama not installed on the laptop (25 Nov) |
+| Version 1 handed over | SFT v2 as Version 1 for now | 24 Nov | adapter zip E:\sft_v2_best.zip (206 MB); GGUF export done 26 Nov: verdict-qwen.gguf q8_0, 1.64 GB, Ollama not installed on the laptop (25 Nov) |
 | Week 2 choice | not started | | |
 | Final comparison | not started | | |
 | Packaging | not started | | |
@@ -451,7 +460,7 @@ ollama run verdict-qwen "hello"
 | 19 Nov | Setup, data, code changes; start SFT v2 overnight |
 | 20 Nov | Base v2 and SFT v2 evals; pass rate overnight |
 | 21 to 23 Nov | GRPO v1 |
-| 24 to 25 Nov | GRPO eval; Version 1 to the eval chat |
+| 24 to 25 Nov | GRPO eval; Version 1 to the Evaluation part |
 | 26 Nov to 1 Dec | Week 2: Path A and/or B |
 | 2 to 3 Dec | Final comparison incl. Gemini and GPT |
 | 4 to 5 Dec | Packaging, buffer |
