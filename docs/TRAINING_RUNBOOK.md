@@ -2,7 +2,7 @@
 
 This file is the full plan for the training part of Verdict, written so that a
 new Claude Code session on the college PC can pick it up and run it with the
-user. Read this file first, then `docs/HANDOFF.md` (what was done before) and
+user. Read this file first, then `docs/TRAINING_SESSION_HANDOFF.md` (what was done before) and
 `docs/TRAINING_PROTOCOL.md` (method and all numbers so far).
 
 ---
@@ -430,11 +430,11 @@ ollama run verdict-qwen "hello"
 |---|---|---|---|
 | Setup on E: | done | 19 Nov | venv on E:, torch cu128, tests pass (openpyxl installed) |
 | BIRD data on E: | done | 19 Nov | 9428 train, 69 dbs, 1534 dev, 11 dbs; zips and __MACOSX removed |
-| Code changes (section 6) | items 1-4 done | 19 to 24 Nov | train_run: venv Python fix (5453f11), single Ctrl+C no longer stops a run (db673e9); generation retries in smaller pieces on out of memory (8267a07) |
+| Code changes (section 6) | items 1-4 done | 19 to 24 Nov | train_run: venv Python fix (eba24b2), single Ctrl+C no longer stops a run (9c3ce8e); generation retries in smaller pieces on out of memory (e9f3a5b) |
 | A. Base v2 eval | done | 23 Nov | 24.6% (range 22.6-26.9), ran 54.9%, 47.6 min |
 | B. SFT v2 | done | 19 to 23 Nov | 1146/1146 steps, resumed at 500; validation 23.0% to 49.5% (79.0% ran) |
 | B. SFT v2 eval | done | 24 Nov | 43.5% (range 41.0-46.0), ran 87.9%; simple 52.0, moderate 33.0, challenging 22.8; vs base +353 / -64, net +289; 38.4 min |
-| C. Pass rate | first run stopped (out of memory); restart unclear | 24 Nov | test: 20 questions in 4.2 min, 5 never / 4 always / 11 kept. Full run (--num-tasks 2000 --gen-batch 2): 48/2000 measured, then CUDA out of memory (tried 12.08 GiB), exit 1 after 33.8 min, about 30-33 s per question. Fixed in 8267a07; restart with --resume given 24 Nov, no result reported yet |
+| C. Pass rate | first run stopped (out of memory); restart unclear | 24 Nov | test: 20 questions in 4.2 min, 5 never / 4 always / 11 kept. Full run (--num-tasks 2000 --gen-batch 2): 48/2000 measured, then CUDA out of memory (tried 12.08 GiB), exit 1 after 33.8 min, about 30-33 s per question. Fixed in e9f3a5b; restart with --resume given 24 Nov, no result reported yet |
 | D. GRPO v1 | not started (as last reported, 24 Nov) | | needs kept_ids.json; plan: 20-question check, then --epochs 1 |
 | D. GRPO v1 eval | not run | | |
 | Version 1 handed over | SFT v2 as Version 1 for now | 24 Nov | adapter zip E:\sft_v2_best.zip (206 MB); GGUF export: merge and conversion unclear (not reported), Ollama not installed on the laptop (25 Nov) |

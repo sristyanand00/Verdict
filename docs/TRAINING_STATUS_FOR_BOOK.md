@@ -1,6 +1,6 @@
 # Training status for the study book
 
-Written 25 Nov 2026 by the Training session, from the files in this repo and the run
+Written 25 Nov 2026 by the Training session (commit ids updated 26 Nov after the history rewrite), from the files in this repo and the run
 outputs the user pasted into the Training chat. Nothing here is estimated unless it says so.
 
 **Where the facts come from.** The training runs happen on the college PC (RTX 3060 12 GB).
@@ -57,7 +57,7 @@ generation batch 8 (runbook section 7, steps A and B).
 | Kept from these 48, and their spread | unclear (`pass_rates.jsonl` is on the PC) | | |
 
 Cause: with `--gen-batch 2`, 2 questions x 8 samples = 16 sequences were generated together, and one
-very long prompt made the attention step need 12 GB. Fix: commit `8267a07` (24 Nov):
+very long prompt made the attention step need 12 GB. Fix: commit `e9f3a5b` (24 Nov):
 `verdict/train/rollout.py` now frees memory and retries in smaller pieces (fewer questions, then fewer
 samples at a time) instead of crashing. Test: `tests/test_rollout.py::test_out_of_memory_retries_in_smaller_pieces`.
 
@@ -82,7 +82,7 @@ samples at a time) instead of crashing. Test: `tests/test_rollout.py::test_out_o
 | Total time, GPU | not available. Planned GPU: RTX 3060 12 GB. Planning estimate (not a measurement): about 40-45 s per question per epoch, 6-8 h for one epoch on 500-600 questions |
 
 **The only GRPO run so far: Phase 1 practice on Qwen2.5-0.5B-Instruct** (Kaggle T4, date not stated in the protocol;
-source `docs/TRAINING_PROTOCOL.md` sections 9.4-9.5; `docs/19-reward-hacking-case-study.md` is still an empty stub):
+source `docs/TRAINING_PROTOCOL.md` sections 9.4-9.5):
 
 - 239 train / 61 check questions taken from BIRD dev, 2 epochs, 60 batches each, 70.5 min; peak memory
   about 8.3 GB of the T4's 15 GB.
@@ -156,17 +156,17 @@ itself has not been run on the laptop.
 
 Training commits on 24 Nov (from `git log`):
 
-- `db673e9` 11:02: `scripts/train_run.py`: one Ctrl+C only warns, two within 5 s stop the run; the child
+- `9c3ce8e` 11:02: `scripts/train_run.py`: one Ctrl+C only warns, two within 5 s stop the run; the child
   runs in its own process group. Bug it fixes: runs on the PC ended with exit code 1 and no traceback
   (most likely an accidental Ctrl+C while copying text).
-- `57f3bca` 11:03: runbook status table.
-- `0f1df04` 11:46: `scripts/export_model.py` and runbook section 9.
-- `8267a07` 14:01: out-of-memory retry in generation (section 1 above).
-- `3bd2bdd` 14:16: `docs/TRAINING_SESSION_HANDOFF.md`.
+- `bafdc38` 11:03: runbook status table.
+- `82ba8d6` 11:46: `scripts/export_model.py` and runbook section 9.
+- `e9f3a5b` 14:01: out-of-memory retry in generation (section 1 above).
+- `d89feb8` 14:16: `docs/TRAINING_SESSION_HANDOFF.md`.
 
-Earlier, `5453f11` (before 24 Nov): `train_run.py` uses the venv Python (bug: "No module named sqlglot").
+Earlier, `eba24b2` (before 24 Nov): `train_run.py` uses the venv Python (bug: "No module named sqlglot").
 
-Laptop test suite on 24 Nov after `8267a07`: 272 passed, 4 skipped.
+Laptop test suite on 24 Nov after `e9f3a5b`: 272 passed, 4 skipped.
 
 ---
 
@@ -174,17 +174,16 @@ Laptop test suite on 24 Nov after `8267a07`: 272 passed, 4 skipped.
 
 **Hand-written PyTorch loops instead of TRL or Unsloth.**
 Not documented. The original plan chose Unsloth (ADR-011 in `VERDICT-MASTER-CONTEXT.md`: it shares
-weight memory between training and generation, which matters on one GPU), and `README.md` still lists
-"Unsloth + vLLM" and "Unsloth/TRL" in the stack. The code in `verdict/train/` uses neither; no document
+weight memory between training and generation, which matters on one GPU), and `README.md` listed
+"Unsloth + vLLM" and "Unsloth/TRL" in the stack until 25 Nov (fixed in `ed0a08a`). The code in `verdict/train/` uses neither; no document
 says why it changed. What the code does document: the reward function keeps the TRL/verl signature so
 it can be reused there (`verdict/train/reward.py`), and the loop does one update per batch, so the PPO
-ratio and clipping are left out (`verdict/train/grpo.py`). The README and the code disagree; the book
-should not claim Unsloth was used.
+ratio and clipping are left out (`verdict/train/grpo.py`). The book should not claim Unsloth was used.
 
 **Qwen2.5-Coder and not Llama, DeepSeek-Coder or Phi.**
 Partly documented, as planning notes (not measurements): `VERDICT-MASTER-CONTEXT.md` says Qwen2.5-Coder
 has the "best SQL ability of the small ones" and lists Llama-3.1-8B as "weaker at SQL than Qwen-Coder".
-DeepSeek-Coder and Phi: not documented. The size (1.5B and not 7B) is explained in `docs/HANDOFF.md`:
+DeepSeek-Coder and Phi: not documented. The size (1.5B and not 7B) is explained in `docs/HANDOFF.md` (deleted 25 Nov in `ed0a08a`; the text was):
 the private mode runs on the laptop, where a 7B GGUF is about 4.5 GB and slower. The same master context
 also warns that RL gains on Qwen models may partly come from the model and not the reward (marked
 unverified there), and suggests a random-reward control run; that run has not been done.
@@ -225,5 +224,5 @@ Times are planning estimates, not measurements.
 7. Gemini / GPT comparison script and run: about 2 h to write, run time depends on API limits.
 8. Optional untrained 7B eval (4-bit): about 2 h of code, 15 GB download, 3-5 h of GPU. Competes with GRPO
    for the one GPU; waiting for the user's decision.
-9. Final model table, runbook and LOG updates, and making `docs/DEPLOYMENT.md` and the README match what
-   was really used (q8_0, no Unsloth): about 2 h.
+9. Final model table, runbook and LOG updates, and making `docs/DEPLOYMENT.md` match what
+   was really used (q8_0): about 2 h.
