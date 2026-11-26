@@ -144,6 +144,8 @@ def main() -> int:
 
     print("STEP 1/6 packages", flush=True)
     run(sys.executable, "-m", "pip", "install", "-q", "sqlglot", "gguf>=0.10.0", "peft")
+    # Kaggle ships an old torchao that makes peft refuse to add LoRA. Nothing here uses it.
+    run(sys.executable, "-m", "pip", "uninstall", "-y", "-q", "torchao")
 
     print("STEP 2/6 SFT model from the GGUF", flush=True)
     if not (SFT / "model.safetensors").exists():
