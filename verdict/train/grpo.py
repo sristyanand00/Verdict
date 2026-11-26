@@ -112,6 +112,8 @@ class GRPOTrainingConfig:
     eval_before_training: bool = True
 
     checkpoint_dir: Path = Path("checkpoints")
+    # Also save latest/ every this many batches, so a crash keeps the work. 0 = end of epoch only.
+    save_every: int = 0
     device: str = field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
 
     reward_scheme: str = "sparse"
@@ -171,6 +173,7 @@ class GRPOTrainer:
         self._micro_steps = 0  # batches whose gradients are accumulated but not yet applied
         self._has_grads = False
         self.global_step = 0
+        self.skipped_answers = 0  # answers left out of an update because they did not fit in memory
         self.best_val_accuracy = -1.0
         self.metrics: dict[str, list[float]] = {
             "reward_mean": [], "reward_std": [], "accuracy": [], "loss": [], "val_accuracy": [],
@@ -279,6 +282,8 @@ class GRPOTrainer:
                 r, loss = self._train_batch(tasks, epoch, num_epochs, b, len(batches))
                 rewards.extend(r)
                 losses.append(loss)
+                if self.config.save_every and b % self.config.save_every == 0 and b < len(batches):
+                    self._save_checkpoint("latest", epoch)
             self._optimizer_step()  # flush any partial accumulation
 
             mean = statistics.fmean(rewards) if rewards else 0.0
@@ -376,6 +381,12 @@ class GRPOTrainer:
         Completions with zero advantage contribute nothing and are skipped;
         a group whose completions all scored the same is skipped entirely.
 
+        If a chunk does not fit in GPU memory (a very long prompt), its
+        completions are retried one at a time, and one that still does not fit
+        is left out. A backward pass that failed halfway may already have added
+        a small part of that chunk's gradient; this is accepted, as stopping
+        the whole run costs far more.
+
         The loss is divided by ``max_tokens`` rather than each completion's own
         length (Dr. GRPO), so long wrong answers are not penalised less per
         token than short ones.
@@ -385,12 +396,29 @@ class GRPOTrainer:
         total = 0.0
         self.model.train()
         mb = self.config.micro_batch_size
-        for i in range(0, len(active), mb):
-            chunk = active[i : i + mb]
-            logp = self._sequence_logprobs(chunk)
-            adv = torch.tensor([s[2] for s in chunk], dtype=torch.float32, device=self.device)
-            loss = -(adv * logp).sum() / denom
-            self.scaler.scale(loss).backward()
+        chunks = [active[i : i + mb] for i in range(0, len(active), mb)]
+        while chunks:
+            chunk = chunks.pop(0)
+            logp = loss = None
+            out_of_memory = False
+            try:
+                logp = self._sequence_logprobs(chunk)
+                adv = torch.tensor([s[2] for s in chunk], dtype=torch.float32, device=self.device)
+                loss = -(adv * logp).sum() / denom
+                self.scaler.scale(loss).backward()
+            except torch.OutOfMemoryError:
+                out_of_memory = True
+            if out_of_memory:
+                # Outside the except block, so the failed pass can be freed.
+                logp = loss = None
+                torch.cuda.empty_cache()
+                if len(chunk) > 1:
+                    chunks[:0] = [[s] for s in chunk]
+                else:
+                    self.skipped_answers += 1
+                    _log(f"Out of memory on one answer ({len(chunk[0][0])} prompt tokens): left out "
+                         f"({self.skipped_answers} so far)")
+                continue
             self._has_grads = True
             total += loss.item()
         return total

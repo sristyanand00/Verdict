@@ -64,6 +64,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--gradient-accumulation-steps", type=int, default=DEFAULTS.gradient_accumulation_steps)
     p.add_argument("--micro-batch-size", type=int, default=DEFAULTS.micro_batch_size,
                    help="completions per forward/backward; lower it if you run out of GPU memory")
+    p.add_argument("--save-every", type=int, default=DEFAULTS.save_every,
+                   help="also save latest/ every N batches (0 = only at the end of each epoch)")
     p.add_argument("--eval-max-tasks", type=int, default=DEFAULTS.eval_max_tasks,
                    help="validation questions evaluated per epoch")
     p.add_argument("--max-schema-chars", type=int, default=DEFAULTS.max_schema_chars,
@@ -147,6 +149,7 @@ def main() -> int:
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         micro_batch_size=args.micro_batch_size,
         eval_max_tasks=args.eval_max_tasks,
+        save_every=args.save_every,
         seed=args.seed,
         checkpoint_dir=Path(args.checkpoint_dir),
         device=args.device,

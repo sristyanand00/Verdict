@@ -138,6 +138,32 @@ def test_fit_updates_weights_and_saves_checkpoints(trainer):
     assert (trainer.checkpoint_dir / "best").is_dir()
 
 
+def test_out_of_memory_chunk_is_retried_one_at_a_time_then_skipped(trainer, monkeypatch):
+    real = trainer._sequence_logprobs
+    sizes = []
+
+    def flaky(chunk):
+        sizes.append(len(chunk))
+        if len(chunk) > 1 or chunk[0][1] == [11]:
+            raise torch.OutOfMemoryError("no memory")
+        return real(chunk)
+
+    monkeypatch.setattr(trainer, "_sequence_logprobs", flaky)
+    trainer._accumulate_gradients([([5, 6], [7], 1.0), ([5, 6], [11], -1.0)])
+    assert sizes == [2, 1, 1]
+    assert trainer.skipped_answers == 1
+    assert trainer._has_grads
+
+
+def test_save_every_writes_latest_during_the_epoch(make_trainer, monkeypatch):
+    trainer = make_trainer(batch_size=1, save_every=2, eval_before_training=False)
+    trainer.reward_fn = _SpreadReward()
+    saved = []
+    monkeypatch.setattr(trainer, "_save_checkpoint", lambda name, epoch: saved.append(name))
+    trainer.fit([_task(1), _task(2), _task(3)])
+    assert saved == ["latest", "latest"]  # after batch 2, and at the end of the epoch
+
+
 def test_tasks_without_a_database_are_skipped(trainer):
     other = BirdTask(
         question_id=9, db_id="not_here", question="q", evidence="", gold_sql="SELECT 1",

@@ -97,11 +97,13 @@ def prepare_dev() -> None:
     shutil.move(str(find(raw, "dev_databases")), DEV / "dev_databases")
 
 
-def grpo(num_tasks: int, eval_tasks: int, folder: Path, log: str) -> None:
+def grpo(num_tasks: int, eval_tasks: int, folder: Path, log: str, save_every: int) -> None:
     run("python", "scripts/train_grpo.py", "--train-dir", str(TRAIN), "--model", str(SFT),
         "--lora-r", "16", "--lr", "1e-5", "--epochs", "1", "--num-tasks", str(num_tasks),
         "--eval-max-tasks", str(eval_tasks), "--checkpoint-dir", str(folder),
-        "--max-schema-chars", SCHEMA_CHARS, log=log)
+        "--max-schema-chars", SCHEMA_CHARS,
+        # A T4 runs out of memory on long prompts with the default of 4.
+        "--micro-batch-size", "2", "--save-every", str(save_every), log=log)
 
 
 def evaluate_dev(model: Path) -> None:
@@ -138,6 +140,8 @@ def main() -> int:
     args = p.parse_args()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    # Less memory lost to fragmentation, which matters on a 15 GB T4.
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
     (OUT / "logs").mkdir(parents=True, exist_ok=True)
     # train_grpo.py writes training_results.json here; the repo folder is removed at the end.
     os.environ["VERDICT_RESULTS_ROOT"] = str(OUT / "eval")
@@ -160,7 +164,7 @@ def main() -> int:
 
     print("STEP 4/6 short GRPO check, then training", flush=True)
     check = TMP / "grpo_check"
-    grpo(20, 20, check, "grpo_check.log")
+    grpo(20, 20, check, "grpo_check.log", save_every=2)
     seconds = batch_seconds((OUT / "logs" / "grpo_check.log").read_text(errors="replace"))
     if not seconds:
         print("The check printed no batch lines; not starting the long run")
@@ -169,13 +173,22 @@ def main() -> int:
     print(f"Check: {sum(seconds) / len(seconds):.0f} s per batch; training on {questions} questions", flush=True)
     shutil.rmtree(check, ignore_errors=True)
     trained = OUT / "grpo_v1"
-    grpo(questions, 100, trained, "grpo_v1.log")
+    try:
+        grpo(questions, 100, trained, "grpo_v1.log", save_every=10)
+    except subprocess.CalledProcessError as e:
+        if not (trained / "latest").is_dir():
+            raise
+        print(f"TRAINING STOPPED EARLY (exit code {e.returncode}); going on with the last saved "
+              "checkpoint. See logs/grpo_v1.log for how far it got.", flush=True)
+    # best/ is written only when an epoch finishes; latest/ also during the epoch.
+    adapter = trained / "best" if (trained / "best").is_dir() else trained / "latest"
+    print(f"Using the adapter in {adapter}", flush=True)
 
     # From here on, a failure must not fail the notebook: the adapter is trained.
     for number, name, step in ((5, "test on BIRD dev", evaluate_dev), (6, "export to GGUF", export)):
         print(f"STEP {number}/6 {name}", flush=True)
         try:
-            step(trained / "best")
+            step(adapter)
         except Exception as e:  # noqa: BLE001
             print(f"STEP {number} FAILED: {e}", flush=True)
 
