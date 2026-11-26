@@ -1,0 +1,129 @@
+﻿@import "tailwindcss";
+
+/*
+  Verdict colours: Midnight Black #030407, Electric Cobalt Blue #1558C9, Acid Lime #D4FF24.
+  Brand (cobalt) is for main buttons and the active tab.
+  Accent (lime) is for small highlights only, so it is never confused with the Green level.
+  Level colours are only used for outcomes, and always come with a text label.
+*/
+@theme {
+  --color-bg: #030407;
+  --color-surface: #121316;
+  --color-surface-2: #1f2022;
+  --color-ink: #f2f4f7;
+  --color-muted: #a6a7aa;
+  --color-line: #292a2d;
+
+  --color-brand: #1558c9;
+  --color-on-brand: #ffffff;
+  --color-brand-text: #5b8def;
+  --color-accent: #d4ff24;
+  --color-on-accent: #030407;
+
+  --color-lv-green: #3fb950;
+  --color-lv-green-tint: #192e1f;
+  --color-lv-yellow: #e3b341;
+  --color-lv-yellow-tint: #332d1d;
+  --color-lv-red: #f85149;
+  --color-lv-red-tint: #371d1e;
+  --color-lv-violet: #a371f7;
+  --color-lv-violet-tint: #29223a;
+  --color-lv-slate: #8b949e;
+  --color-lv-slate-tint: #25282c;
+
+  --color-robot: #dde2ea;
+  --color-robot-shade: #babec5;
+  --color-robot-joint: #898c91;
+  --color-robot-line: #6e7175;
+  --color-visor: #0b0f1a;
+
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+}
+
+html, body { background: var(--color-bg); color: var(--color-ink); }
+
+/* Everything is sized in rem, so the whole UI grows with the screen.
+   16px up to about 1540px wide, then larger: about 20px on a 1920px screen. */
+html { font-size: clamp(16px, 1.04vw, 26px); }
+body { font-family: var(--font-sans); margin: 0; }
+
+/* ---------- robot parts ---------- */
+.r-body  { fill: var(--color-robot); stroke: var(--color-robot-line); stroke-width: 1.5; }
+.r-shade { fill: var(--color-robot-shade); }
+.r-joint { fill: var(--color-robot-joint); stroke: var(--color-robot-line); stroke-width: 1.2; }
+.r-visor { fill: var(--color-visor); stroke: var(--color-robot-line); stroke-width: 1.5; }
+.r-eye   { fill: var(--color-accent); }
+.r-line  { stroke: var(--color-accent); fill: none; stroke-linecap: round; }
+.r-pupil { fill: var(--color-visor); }
+.r-shine { fill: #ffffff; opacity: .45; }
+.r-ball  { fill: var(--color-robot-joint); }
+.r-ball.on { fill: var(--color-accent); }
+.r-band  { fill: var(--color-accent); }
+.r-check { stroke: var(--color-accent); fill: none; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+.r-panel { fill: var(--color-visor); stroke: var(--color-robot-line); stroke-width: 1.2; }
+.r-ptext { fill: var(--color-accent); font: 800 18px "Segoe UI", sans-serif; }
+.r-book  { fill: var(--color-brand); stroke: var(--color-robot-line); stroke-width: 1.2; }
+.r-page  { fill: #ffffff; }
+.r-pageline { stroke: #9aa3b2; stroke-width: 1.5; }
+.r-bubble { fill: var(--color-surface); stroke: var(--color-line); stroke-width: 1.5; }
+.r-bubtext { fill: var(--color-ink); font: 800 22px "Segoe UI", sans-serif; }
+.r-spark { fill: var(--color-accent); }
+
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes twinkle { 0%, 100% { opacity: .3; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.1); } }
+.anim-float { animation: float 4.5s ease-in-out infinite; }
+.anim-blink { animation: blink 5s infinite; transform-box: fill-box; transform-origin: center; }
+.anim-twinkle { animation: twinkle 2.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+@keyframes pop-in { from { opacity: 0; transform: translateY(8px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes stamp-in {
+  0% { opacity: 0; transform: scale(2.6) rotate(-14deg); }
+  60% { opacity: 1; transform: scale(.92) rotate(-4deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-4deg); }
+}
+@keyframes fill { from { width: 0; } to { width: 100%; } }
+@keyframes scan { from { transform: translateX(-100%); } to { transform: translateX(400%); } }
+.anim-pop { animation: pop-in .45s ease-out both; }
+.anim-stamp { animation: stamp-in .55s cubic-bezier(.2,.8,.2,1) both; }
+.anim-fill { animation: fill linear both; }
+.anim-scan { animation: scan 1.1s ease-in-out both; }
+
+/* hero entrance: plays once, then everything is still */
+@keyframes letter-in {
+  0% { opacity: 0; transform: translateY(.55em) rotate(10deg) scale(.7); filter: blur(10px); }
+  60% { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+@keyframes word-in { from { opacity: 0; transform: translateY(14px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes sweep-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+.anim-letter { display: inline-block; animation: letter-in .8s cubic-bezier(.2,.8,.2,1) both; }
+.anim-word { animation: word-in .6s ease-out both; }
+.anim-sweep { transform-origin: left center; animation: sweep-in .55s cubic-bezier(.7,0,.2,1) both; }
+.anim-rise { animation: rise-in .7s cubic-bezier(.2,.8,.2,1) both; }
+
+/* arena robots */
+@keyframes think { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-5px) rotate(1.5deg); } }
+@keyframes look { 0%, 100% { transform: translateX(-3px); } 50% { transform: translateX(3px); } }
+@keyframes hop { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-22px); } 55% { transform: translateY(0); } 70% { transform: translateY(-8px); } }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-6px) rotate(-2deg); } 40%, 80% { transform: translateX(6px) rotate(2deg); } }
+@keyframes dot { 0%, 80%, 100% { transform: translateY(0); opacity: .4; } 40% { transform: translateY(-6px); opacity: 1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.anim-think { animation: think .9s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.anim-look { animation: look 1.1s ease-in-out infinite; }
+.anim-hop { animation: hop 1s ease-out 2; }
+.anim-shake { animation: shake .6s ease-in-out 2; transform-box: fill-box; transform-origin: center bottom; }
+.anim-dot { display: inline-block; animation: dot 1s ease-in-out infinite; }
+.anim-spin { animation: spin 2.4s linear infinite; }
+
+@keyframes slide-in { from { transform: translateX(100%); } to { transform: none; } }
+.anim-slide { animation: slide-in .35s cubic-bezier(.2,.8,.2,1) both; }
+
+@keyframes flow { to { stroke-dashoffset: -28; } }
+.flow { stroke-dasharray: 7 7; animation: flow 1.4s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-float, .anim-blink, .anim-twinkle, .flow, .anim-pop, .anim-stamp, .anim-fill, .anim-scan, .anim-letter, .anim-word, .anim-sweep, .anim-rise, .anim-think, .anim-look, .anim-hop, .anim-shake, .anim-dot, .anim-spin, .anim-slide { animation: none; }
+}
