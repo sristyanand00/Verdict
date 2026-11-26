@@ -52,7 +52,9 @@ def main() -> int:
 
     print(f"Reading {args.gguf} (needs about 14 GB of RAM)", flush=True)
     loaded = AutoModelForCausalLM.from_pretrained(str(args.gguf.parent), gguf_file=args.gguf.name)
-    state = loaded.float().state_dict()
+    # No .float() here: transformers refuses it for a model loaded from a GGUF.
+    # load_state_dict below casts the values into the float32 base model.
+    state = loaded.state_dict()
 
     # Config and tokenizer come from the official base model, so the prompt
     # format and stop tokens are exactly the ones used in training.
