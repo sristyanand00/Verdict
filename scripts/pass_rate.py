@@ -63,8 +63,38 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--chunk", type=int, default=16, help="questions per save")
     p.add_argument("--time-limit-hours", type=float, default=None)
     p.add_argument("--resume", action="store_true", help="skip questions already in pass_rates.jsonl")
+    p.add_argument("--fresh", action="store_true",
+                   help="delete an existing pass_rates.jsonl and start over (without this or --resume, the run refuses)")
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     return p.parse_args()
+
+
+def read_done(rates_file: Path) -> tuple[dict[int, int], int]:
+    """Read finished questions from pass_rates.jsonl and drop broken lines.
+
+    A run killed while writing (power cut, PC switched off) can leave a half
+    line or zero bytes at the end. Such lines are skipped, and the file is
+    rewritten with only the good lines, so the next append starts on a clean
+    line. Returns (question_id -> correct, number of lines dropped).
+    """
+    done: dict[int, int] = {}
+    good: list[str] = []
+    dropped = 0
+    raw = rates_file.read_bytes().decode("utf-8", errors="replace")
+    for line in raw.splitlines():
+        line = line.strip().strip("\x00")
+        if not line:
+            continue
+        try:
+            r = json.loads(line)
+            done[int(r["question_id"])] = int(r["correct"])
+        except (ValueError, KeyError, TypeError):
+            dropped += 1
+            continue
+        good.append(line)
+    if dropped or (raw and not raw.endswith("\n")):
+        rates_file.write_text("".join(g + "\n" for g in good), encoding="utf-8")
+    return done, dropped
 
 
 def main() -> int:
@@ -82,10 +112,15 @@ def main() -> int:
     rates_file = args.out / "pass_rates.jsonl"
     done: dict[int, int] = {}
     if args.resume and rates_file.exists():
-        for line in rates_file.read_text(encoding="utf-8").splitlines():
-            r = json.loads(line)
-            done[r["question_id"]] = r["correct"]
-    elif rates_file.exists():
+        done, dropped = read_done(rates_file)
+        if dropped:
+            logger.warning("Dropped %d broken line(s) from %s (run was cut off while writing); "
+                           "those questions will be measured again.", dropped, rates_file)
+    elif rates_file.exists() and rates_file.stat().st_size > 0:
+        if not args.fresh:
+            logger.error("%s already has results. Add --resume to continue, or --fresh to delete them "
+                         "and start over.", rates_file)
+            return 1
         rates_file.unlink()
     todo = [t for t in train if t.question_id not in done]
     logger.info("%d questions to measure (%d already done), %d answers each", len(todo), len(done), args.num_samples)
