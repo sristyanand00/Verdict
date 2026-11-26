@@ -187,8 +187,8 @@ class ModelEntry:
 OUTSIDE_OPENAI_MODELS = {
     "chatgpt": ("ChatGPT (cloud)", "OPENAI_API_KEY", "OPENAI_MODEL", "gpt-4o-mini",
                 "https://api.openai.com/v1"),
-    "groq-llama": ("Llama 3.3 70B (Groq cloud)", "GROQ_API_KEY", "GROQ_MODEL",
-                   "llama-3.3-70b-versatile", "https://api.groq.com/openai/v1"),
+    "groq": ("GPT-OSS 120B (OpenAI, via Groq)", "GROQ_API_KEY", "GROQ_MODEL",
+             "openai/gpt-oss-120b", "https://api.groq.com/openai/v1"),
 }
 
 

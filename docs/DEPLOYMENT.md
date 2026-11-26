@@ -10,7 +10,7 @@ How Verdict runs in each of its three setups. The same code runs in all of them.
 | `VERDICT_QWEN_MODEL` | Model name on that server | `verdict-qwen` |
 | `VERDICT_QWEN_BASE_MODEL` | The untrained Qwen shown in the Model Arena next to the trained one. `off` hides it. | `qwen2.5-coder:1.5b` |
 | `OPENAI_API_KEY`, `OPENAI_MODEL` | With a key, ChatGPT joins the Model Arena | not set; model `gpt-4o-mini` |
-| `GROQ_API_KEY`, `GROQ_MODEL` | With a key, Llama 3.3 70B on Groq (free tier) joins the Model Arena | not set; model `llama-3.3-70b-versatile` |
+| `GROQ_API_KEY`, `GROQ_MODEL` | With a key, a large open model on Groq (free tier) joins the Model Arena: by default OpenAI's GPT-OSS 120B. Groq retires models; check `GET https://api.groq.com/openai/v1/models` if it stops working. | not set; model `openai/gpt-oss-120b` |
 | `VERDICT_MODELS_FILE` | Optional JSON list of models. Replaces the two defaults, for example to list base, SFT and GRPO separately. | not set |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | Only if Gemini is used (cloud mode or second model) | read from `.env` |
 | `VERDICT_ATTEMPTS` | Attempts per question | `8` |
