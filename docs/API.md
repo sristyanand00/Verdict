@@ -275,14 +275,14 @@ What each item holds:
 
 | Method and path | Returns |
 |---|---|
-| `GET /api/databases` | `[{id, name, source, available, tables_count}]`. `source` is `preloaded` or `upload`. If `available` is false, the file is not there yet. |
+| `GET /api/databases` | `[{id, name, description, source, available, tables_count}]`. `source` is `preloaded` or `upload`. If `available` is false, the file is not there yet. `description` is one line about the data (empty for uploads). |
 | `POST /api/databases/upload` | Multipart, with the file in the field `file` (CSV, XLSX or SQLite, up to 50 MB). Returns `{id, name, source, available, tables_count, tables, columns}`. 403 when the server has uploads turned off. Old uploads may be deleted automatically (`VERDICT_UPLOAD_TTL_HOURS`). |
 | `GET /api/databases/{id}/schema` | `{id, name, tables: [{name, row_count, columns: [{name, type}]}]}` |
 | `GET /api/models` | `[{id, label, kind, provider, private, reachable}]`. `kind` is `own` (the user's Qwen model, any version) or `outside` (Gemini and others, used only in the Model Arena). `provider` is how the server reaches it: `openai` (vLLM or Ollama) or `gemini`. Changed 25 Nov: `kind` used to hold what `provider` holds now. |
 | `GET /api/settings` | `{database_id, model, second_model, second_model_id}` |
 | `PUT /api/settings` | The same fields, all optional. Returns the new settings. Admin only (403 for analysts). |
 
-The preloaded database ids are `olist`, `financial` and `debit_card_specializing`.
+The preloaded databases come from the server setting `VERDICT_DATABASES`. By default: `olist` (Olist e-commerce, the demo data), and four hard BIRD databases: `financial` (Czech bank), `formula_1`, `european_football_2` and `card_games`. Read the list from `/api/databases`; never hard-code a database id. Let the analyst pick one, and send its id as `database_id`.
 
 The default model ids are `qwen` (vLLM or Ollama) and `gemini`. A setup can list other models, so the frontend should read `/api/models` instead of hard-coding ids.
 
@@ -295,6 +295,37 @@ The default model ids are `qwen` (vLLM or Ollama) and `gemini`. A setup can list
 | `GET /api/arena` | The list of scripted question keys |
 | `GET /api/arena/{key}` | The cached 4-model answers for one question, from `results/arena.json` |
 | `GET /api/health` | `{ok, app_db, databases: {id: available}, models: {id: reachable}, attempts, thresholds_placeholder, results_ready}`. `databases` lists only the preloaded ones. |
+
+## Live Model Arena
+
+`POST /api/arena/run` with `{question, database_id, models: [model_id, ...]}` (1 to 4 models, ids from `/api/models`).
+
+Every model gets the same question, database and knowledge; its attempts go through the same verifier and trust rules as a normal ask. Arena runs are comparisons: they are not saved as asks and do not enter the review queue.
+
+Response:
+
+```json
+{
+  "question": "How many accounts are there?",
+  "database_id": "financial",
+  "credits_charged": 1,
+  "results": [
+    { "model_id": "qwen", "label": "Qwen 1.5B (trained), private", "kind": "own", "provider": "openai",
+      "status": "ok", "level": "trusted", "reasons": [{"code": "agreement", "text": "8 of 8 attempts agree."}],
+      "answer_text": "4,500", "sql": "SELECT COUNT(*) FROM account", "columns": ["COUNT(*)"], "rows": [[4500]],
+      "n_attempts": 8, "agree": 8, "latency_ms": 15900, "cache_hit": false, "error": null },
+    { "model_id": "gemini", "label": "Gemini (cloud)", "kind": "outside", "provider": "gemini",
+      "status": "off", "level": null, "reasons": [], "answer_text": null, "sql": null, "columns": [], "rows": [],
+      "n_attempts": 0, "agree": 0, "latency_ms": 0, "cache_hit": false,
+      "error": "Outside models are turned off on this server." }
+  ]
+}
+```
+
+- `status`: `ok`; `off` (outside models are turned off on this server, `VERDICT_ARENA_OUTSIDE`); or `error` (that model failed, for example quota or time limit; `error` says why in plain words). One model failing does not stop the others.
+- `agree`: attempts in the largest group. `rows`: at most 20.
+- Credits: the user's own model (`kind: own`) is free. Each outside model that is actually called costs `prices.arena_outside_model`, written as one `arena` ledger row whose note lists the models. An answer from the cache (`cache_hit: true`) and a failed model cost nothing. The provider's runs are free.
+- 402 before anything runs if the balance cannot pay for the outside models asked for. 429 counts against the same per-minute limit as asking.
 
 ## Changes from plan section 8
 

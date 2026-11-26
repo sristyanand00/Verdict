@@ -5,6 +5,7 @@ from environment variables, so the same code runs everywhere:
 
     VERDICT_APP_DB          path of data/app.db
     VERDICT_OLIST_PATH      path of the Olist SQLite file
+    VERDICT_DATABASES       databases offered, comma-separated ids (see KNOWN_DATABASES)
     VERDICT_QWEN_URL        OpenAI-compatible server, e.g. http://127.0.0.1:11434/v1
     VERDICT_QWEN_MODEL      model name on that server, e.g. verdict-qwen
     VERDICT_MODELS_FILE     optional JSON file listing models (replaces the defaults)
@@ -33,6 +34,13 @@ Limits for a public server:
     VERDICT_MAX_CONCURRENT_ASKS
                             fresh asks running at once (default 2)
     VERDICT_QUEUE_WAIT_S    how long an ask waits for a free slot (default 60)
+
+Live Model Arena:
+
+    VERDICT_ARENA_OUTSIDE   "on" lets the Arena call outside models such as Gemini
+                            (default off, so no outside API quota is used)
+    VERDICT_ARENA_OUTSIDE_ATTEMPTS
+                            attempts asked of an outside model (default 8)
 """
 
 from __future__ import annotations
@@ -81,6 +89,8 @@ class Database:
     source: str  # "preloaded" or "upload"
     #: who uploaded it; None for preloaded databases (everyone may use those)
     owner: str | None = None
+    #: one line about the data, shown in the database picker
+    description: str = ""
 
     def visible_to(self, user: dict | None) -> bool:
         """Preloaded databases are for everyone; an upload only for its owner
@@ -94,19 +104,43 @@ class Database:
         return self.path.is_file()
 
 
+#: Databases the server can offer: id -> (name, one line about it).
+#: Olist is the demo's e-commerce data; the rest are BIRD dev databases, which
+#: were not used in training (training used BIRD train).
+KNOWN_DATABASES: dict[str, tuple[str, str]] = {
+    "olist": ("Olist e-commerce", "Brazilian online shop: orders, items, payments, customers, sellers, reviews."),
+    "financial": ("Czech bank", "Accounts, clients, loans, cards and transactions of a Czech bank. Coded values."),
+    "formula_1": ("Formula 1", "Races, drivers, constructors, results, lap times and pit stops, 1950 onwards."),
+    "european_football_2": ("European football", "Matches, teams, players and player ratings from European leagues."),
+    "card_games": ("Magic: The Gathering cards", "Cards, sets, rulings, legalities and foreign names. Messy columns."),
+    "california_schools": ("California schools", "Schools, SAT scores and free-meal numbers."),
+    "codebase_community": ("Stats Q&A site", "Posts, users, comments, votes and badges of a Q&A site."),
+    "debit_card_specializing": ("Fuel cards", "Customers, gas stations, products and monthly fuel spending."),
+    "student_club": ("Student club", "Members, events, attendance, budget and expenses."),
+    "superhero": ("Superheroes", "Superheroes, their powers, attributes and publishers."),
+    "thrombosis_prediction": ("Thrombosis patients", "Patients, lab tests and examinations."),
+    "toxicology": ("Toxicology molecules", "Molecules, atoms and bonds, with a carcinogenic label."),
+}
+
+#: Offered when VERDICT_DATABASES is not set: the demo data plus four hard databases.
+DEFAULT_DATABASES = "olist,financial,formula_1,european_football_2,card_games"
+
+
 def preloaded_databases() -> list[Database]:
-    olist = os.environ.get("VERDICT_OLIST_PATH")
-    return [
-        Database(
-            "olist", "Olist e-commerce",
-            Path(olist) if olist else data_root() / "olist" / "olist.sqlite", "preloaded",
-        ),
-        Database("financial", "BIRD financial (Czech bank)", db_path("financial"), "preloaded"),
-        Database(
-            "debit_card_specializing", "BIRD debit card (fuel cards)",
-            db_path("debit_card_specializing"), "preloaded",
-        ),
-    ]
+    """The databases from VERDICT_DATABASES (comma-separated ids from KNOWN_DATABASES)."""
+    ids = [i.strip() for i in os.environ.get("VERDICT_DATABASES", DEFAULT_DATABASES).split(",") if i.strip()]
+    out = []
+    for db_id in dict.fromkeys(ids):
+        if db_id not in KNOWN_DATABASES:
+            continue  # unknown ids are skipped; /api/health shows which are offered
+        name, about = KNOWN_DATABASES[db_id]
+        if db_id == "olist":
+            olist = os.environ.get("VERDICT_OLIST_PATH")
+            path = Path(olist) if olist else data_root() / "olist" / "olist.sqlite"
+        else:
+            path = db_path(db_id)
+        out.append(Database(db_id, name, path, "preloaded", description=about))
+    return out
 
 
 def table_counts(path: Path) -> dict[str, int]:
@@ -219,6 +253,9 @@ class AppState:
     ask_rate_per_minute: int = DEFAULT_ASK_RATE
     max_concurrent_asks: int = DEFAULT_MAX_CONCURRENT_ASKS
     queue_wait_s: float = DEFAULT_QUEUE_WAIT_S
+    # live Model Arena
+    arena_outside_enabled: bool = False
+    arena_outside_attempts: int = DEFAULT_ATTEMPTS
 
     def __post_init__(self) -> None:
         from concurrent.futures import ThreadPoolExecutor
@@ -264,6 +301,8 @@ class AppState:
             ask_rate_per_minute=int(env("VERDICT_ASK_RATE", DEFAULT_ASK_RATE)),
             max_concurrent_asks=int(env("VERDICT_MAX_CONCURRENT_ASKS", DEFAULT_MAX_CONCURRENT_ASKS)),
             queue_wait_s=float(env("VERDICT_QUEUE_WAIT_S", DEFAULT_QUEUE_WAIT_S)),
+            arena_outside_enabled=_on(env("VERDICT_ARENA_OUTSIDE", "off")),
+            arena_outside_attempts=int(env("VERDICT_ARENA_OUTSIDE_ATTEMPTS", DEFAULT_ATTEMPTS)),
         )
 
     def prices(self) -> dict[str, int]:

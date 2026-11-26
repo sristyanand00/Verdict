@@ -11,6 +11,8 @@ How Verdict runs in each of its three setups. The same code runs in all of them.
 | `VERDICT_MODELS_FILE` | Optional JSON list of models. Replaces the two defaults, for example to list base, SFT and GRPO separately. | not set |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | Only if Gemini is used (cloud mode or second model) | read from `.env` |
 | `VERDICT_ATTEMPTS` | Attempts per question | `8` |
+| `VERDICT_DATABASES` | Databases offered to analysts, comma-separated ids: `olist`, and BIRD dev databases (`financial`, `formula_1`, `european_football_2`, `card_games`, `california_schools`, `codebase_community`, `debit_card_specializing`, `student_club`, `superhero`, `thrombosis_prediction`, `toxicology`) | `olist,financial,formula_1,european_football_2,card_games` |
+| `VERDICT_WARM_DATABASES` | `off` skips reading the database files once at start. On by default: the first query on a large file not yet in memory can otherwise take seconds and hit the 5 s query limit. | `on` |
 | `VERDICT_OLIST_PATH` | Location of the Olist SQLite file | `datasets/olist/olist.sqlite` |
 | `VERDICT_APP_DB` | Location of the app's own database (asks, review queue, knowledge) | `data/app.db` |
 | `VERDICT_CORS_ORIGINS` | Website addresses allowed to call the API, comma-separated | `http://localhost:5173,http://127.0.0.1:5173` |
@@ -26,6 +28,8 @@ How Verdict runs in each of its three setups. The same code runs in all of them.
 | `VERDICT_ASK_RATE` | Questions per user per minute (429 after that) | `10` |
 | `VERDICT_MAX_CONCURRENT_ASKS` | Fresh questions running at the same time; the rest wait. Keep it low on a CPU-only machine. | `2` |
 | `VERDICT_QUEUE_WAIT_S` | How long a question waits for a free slot before 503 "busy" | `60` |
+| `VERDICT_ARENA_OUTSIDE` | `on` lets the live Model Arena call outside models such as Gemini. Off by default, so no outside API quota or money is used until you turn it on. | `off` |
+| `VERDICT_ARENA_OUTSIDE_ATTEMPTS` | Attempts asked of an outside model in the Arena (8 gives a full verdict; 1 saves quota) | `8` |
 | `VERDICT_AUTH_RATE` | Login and signup tries per minute from one address | `10` |
 | `VERDICT_TRUST_PROXY` | Set to `1` behind Cloudflare Tunnel, so the rate limit sees each visitor's address (`CF-Connecting-IP`) instead of the tunnel's. Leave unset when the server is reached directly. | not set |
 

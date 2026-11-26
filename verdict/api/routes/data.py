@@ -20,8 +20,8 @@ router = APIRouter()
 
 
 def _db_json(d) -> dict:
-    out = {"id": d.id, "name": d.name, "source": d.source, "available": d.available,
-           "tables_count": None}
+    out = {"id": d.id, "name": d.name, "description": d.description, "source": d.source,
+           "available": d.available, "tables_count": None}
     if d.available:
         try:
             out["tables_count"] = len(table_counts(d.path))

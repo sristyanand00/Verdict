@@ -106,7 +106,7 @@ TOO_SLOW = "The question took too long to answer, so it was stopped. You were no
 MODEL_DOWN = "The model is not reachable right now. Try again later. You were not charged."
 
 
-def _run_fresh(s, db, model, m2, question: str, start: float) -> dict:
+def _run_fresh(s, db, model, m2, question: str, start: float, n: int | None = None) -> dict:
     """Run the pipeline in a worker thread, at most max_concurrent_asks at a
     time, and stop waiting after ask_timeout_s.
 
@@ -116,7 +116,7 @@ def _run_fresh(s, db, model, m2, question: str, start: float) -> dict:
     if not s.ask_slots.acquire(timeout=s.queue_wait_s):
         raise HTTPException(503, BUSY)
     try:
-        future = s.ask_pool.submit(_pipeline, s, db, model, m2, question, start)
+        future = s.ask_pool.submit(_pipeline, s, db, model, m2, question, start, n)
     except Exception:
         s.ask_slots.release()
         raise
@@ -128,7 +128,7 @@ def _run_fresh(s, db, model, m2, question: str, start: float) -> dict:
         raise HTTPException(504, TOO_SLOW) from None
 
 
-def _pipeline(s, db, model, m2, question: str, start: float) -> dict:
+def _pipeline(s, db, model, m2, question: str, start: float, n: int | None = None) -> dict:
     second = None
     if m2 is not None:
         try:
@@ -142,7 +142,7 @@ def _pipeline(s, db, model, m2, question: str, start: float) -> dict:
         raise HTTPException(503, MODEL_DOWN) from None
     try:
         answer = run_ask(
-            db.path, question, writer=writer, n=s.attempts, thresholds=s.thresholds,
+            db.path, question, writer=writer, n=n or s.attempts, thresholds=s.thresholds,
             knowledge=s.store.knowledge(db.id), second_writer=second,
         )
     except LLMError:
