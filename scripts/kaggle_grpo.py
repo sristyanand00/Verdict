@@ -8,6 +8,11 @@ holding verdict-qwen.gguf (the exported SFT model) added as input.
     !git clone -q https://github.com/sristyanand00/verdict.git /kaggle/working/verdict
     !python /kaggle/working/verdict/scripts/kaggle_grpo.py
 
+To train further from an earlier run, add that notebook's output (it holds
+grpo_v1/best) as a second input and pass --continue-training. The new run uses
+questions the first one did not, and writes grpo_v2/ and
+export/verdict-qwen-grpo2.gguf.
+
 Steps: rebuild the SFT model from the GGUF, download BIRD, run a short GRPO
 check, pick how many questions fit in the training time from the check's batch
 times, train one epoch, evaluate on BIRD dev, export to GGUF.
@@ -36,6 +41,7 @@ DEV = TMP / "bird_dev"
 BIRD_URL = "https://bird-bench.oss-cn-beijing.aliyuncs.com/{}.zip"
 SCHEMA_CHARS = "12000"
 BATCH = 4  # questions per GRPO batch (train_grpo.py default)
+FIRST_RUN_QUESTIONS = 500  # --num-tasks of the first run, left out when continuing
 
 
 def batch_seconds(log_text: str) -> list[int]:
@@ -97,25 +103,32 @@ def prepare_dev() -> None:
     shutil.move(str(find(raw, "dev_databases")), DEV / "dev_databases")
 
 
-def grpo(num_tasks: int, eval_tasks: int, folder: Path, log: str, save_every: int) -> None:
+def previous_adapter(root: str = "/kaggle/input") -> Path | None:
+    """The grpo_v1/best adapter of an earlier run, added to the notebook as input."""
+    hits = sorted(glob.glob(f"{root}/**/grpo_v1/best/adapter_config.json", recursive=True))
+    return Path(hits[0]).parent if hits else None
+
+
+def grpo(num_tasks: int, eval_tasks: int, folder: Path, log: str, save_every: int,
+         extra: tuple[str, ...] = ()) -> None:
     run("python", "scripts/train_grpo.py", "--train-dir", str(TRAIN), "--model", str(SFT),
         "--lora-r", "16", "--lr", "1e-5", "--epochs", "1", "--num-tasks", str(num_tasks),
         "--eval-max-tasks", str(eval_tasks), "--checkpoint-dir", str(folder),
         "--max-schema-chars", SCHEMA_CHARS,
         # A T4 runs out of memory on long prompts with the default of 4.
-        "--micro-batch-size", "2", "--save-every", str(save_every), log=log)
+        "--micro-batch-size", "2", "--save-every", str(save_every), *extra, log=log)
 
 
-def evaluate_dev(model: Path) -> None:
+def evaluate_dev(model: Path, label: str) -> None:
     prepare_dev()
     os.environ["VERDICT_DATA_ROOT"] = str(DEV)
     os.environ["VERDICT_RESULTS_ROOT"] = str(OUT / "eval")
-    run("python", "scripts/evaluate.py", "--model", str(model), "--label", "grpo_v1",
+    run("python", "scripts/evaluate.py", "--model", str(model), "--label", label,
         "--max-schema-chars", SCHEMA_CHARS, "--timeout", "30", "--workers", "4", "--gen-batch", "8",
-        log="eval_grpo_v1.log")
+        log=f"eval_{label}.log")
 
 
-def export(adapter: Path) -> None:
+def export(adapter: Path, name: str) -> None:
     work = TMP / "export"
     run("python", "scripts/export_model.py", "--adapter", str(adapter), "--out", str(work),
         log="export.log")
@@ -125,7 +138,6 @@ def export(adapter: Path) -> None:
     run(sys.executable, "-m", "pip", "install", "-q", str(llama / "gguf-py"), "sentencepiece", "protobuf")
     final = OUT / "export"
     final.mkdir(parents=True, exist_ok=True)
-    name = "verdict-qwen-grpo.gguf"
     run("python", str(llama / "convert_hf_to_gguf.py"), str(work / "merged"),
         "--outfile", str(final / name), "--outtype", "q8_0", log="gguf.log")
     modelfile = (work / "Modelfile").read_text(encoding="utf-8")
@@ -135,9 +147,26 @@ def export(adapter: Path) -> None:
 def main() -> int:
     p = argparse.ArgumentParser(description="GRPO on Kaggle from start to finish",
                                 formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
-    p.add_argument("--hours", type=float, default=5.5, help="training time to fill with questions")
-    p.add_argument("--max-questions", type=int, default=500)
+    p.add_argument("--hours", type=float, default=None,
+                   help="training time to fill with questions (default 5.5; 7.5 when continuing)")
+    p.add_argument("--max-questions", type=int, default=None, help="default 500; 1100 when continuing")
+    p.add_argument("--continue-training", action="store_true",
+                   help="start from the grpo_v1/best adapter found in /kaggle/input")
     args = p.parse_args()
+    more = args.continue_training
+    hours = args.hours or (7.5 if more else 5.5)
+    most = args.max_questions or (1100 if more else FIRST_RUN_QUESTIONS)
+    run_name = "grpo_v2" if more else "grpo_v1"
+    gguf = "verdict-qwen-grpo2.gguf" if more else "verdict-qwen-grpo.gguf"
+    extra: tuple[str, ...] = ()
+    if more:
+        # Checked first, so a missing input fails in seconds and not after the downloads.
+        previous = previous_adapter()
+        if previous is None:
+            print("No grpo_v1/best in /kaggle/input: add the first run's output to the notebook")
+            return 1
+        print(f"Continuing from {previous}", flush=True)
+        extra = ("--init-adapter", str(previous), "--exclude-sampled", str(FIRST_RUN_QUESTIONS))
 
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     # Less memory lost to fragmentation, which matters on a 15 GB T4.
@@ -164,31 +193,32 @@ def main() -> int:
 
     print("STEP 4/6 short GRPO check, then training", flush=True)
     check = TMP / "grpo_check"
-    grpo(20, 20, check, "grpo_check.log", save_every=2)
+    grpo(20, 20, check, "grpo_check.log", save_every=2, extra=extra)
     seconds = batch_seconds((OUT / "logs" / "grpo_check.log").read_text(errors="replace"))
     if not seconds:
         print("The check printed no batch lines; not starting the long run")
         return 1
-    questions = questions_that_fit(seconds, args.hours, args.max_questions)
+    questions = questions_that_fit(seconds, hours, most)
     print(f"Check: {sum(seconds) / len(seconds):.0f} s per batch; training on {questions} questions", flush=True)
     shutil.rmtree(check, ignore_errors=True)
-    trained = OUT / "grpo_v1"
+    trained = OUT / run_name
     try:
-        grpo(questions, 100, trained, "grpo_v1.log", save_every=10)
+        grpo(questions, 100, trained, f"{run_name}.log", save_every=10, extra=extra)
     except subprocess.CalledProcessError as e:
         if not (trained / "latest").is_dir():
             raise
         print(f"TRAINING STOPPED EARLY (exit code {e.returncode}); going on with the last saved "
-              "checkpoint. See logs/grpo_v1.log for how far it got.", flush=True)
+              f"checkpoint. See logs/{run_name}.log for how far it got.", flush=True)
     # best/ is written only when an epoch finishes; latest/ also during the epoch.
     adapter = trained / "best" if (trained / "best").is_dir() else trained / "latest"
     print(f"Using the adapter in {adapter}", flush=True)
 
     # From here on, a failure must not fail the notebook: the adapter is trained.
-    for number, name, step in ((5, "test on BIRD dev", evaluate_dev), (6, "export to GGUF", export)):
+    for number, name, step, value in ((5, "test on BIRD dev", evaluate_dev, run_name),
+                                      (6, "export to GGUF", export, gguf)):
         print(f"STEP {number}/6 {name}", flush=True)
         try:
-            step(adapter)
+            step(adapter, value)
         except Exception as e:  # noqa: BLE001
             print(f"STEP {number} FAILED: {e}", flush=True)
 

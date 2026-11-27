@@ -87,11 +87,21 @@ def parse_args() -> argparse.Namespace:
     train.add_argument("--task-ids", type=Path, default=None,
                        help="JSON list of question ids to train on (from scripts/pass_rate.py)")
 
+    train.add_argument("--exclude-sampled", type=int, default=None, metavar="N",
+                       help="skip the questions an earlier run with --num-tasks N used (same other settings)")
+
     lora = p.add_argument_group("LoRA")
     lora.add_argument("--lora-r", type=int, default=DEFAULTS.lora_r, help="0 trains every weight")
     lora.add_argument("--lora-alpha", type=int, default=DEFAULTS.lora_alpha)
     lora.add_argument("--init-adapter", type=Path, default=None, help="start from this saved adapter (e.g. SFT best/)")
     return p.parse_args()
+
+
+def evenly_spaced(tasks: list, n: int | None) -> list:
+    """The ``n`` tasks that ``--num-tasks n`` picks: spread evenly over the list."""
+    if not n or n >= len(tasks):
+        return tasks
+    return tasks[:: len(tasks) // n][:n]
 
 
 def load_tasks(args):
@@ -113,9 +123,11 @@ def load_tasks(args):
     if args.task_ids:
         keep = set(json.loads(args.task_ids.read_text()))
         train_tasks = [t for t in train_tasks if t.question_id in keep]
-    if args.num_tasks and args.num_tasks < len(train_tasks):
-        step = len(train_tasks) // args.num_tasks
-        train_tasks = train_tasks[::step][: args.num_tasks]
+    if args.exclude_sampled:
+        # Leave out what an earlier run with --num-tasks N was trained on.
+        used = {t.question_id for t in evenly_spaced(train_tasks, args.exclude_sampled)}
+        train_tasks = [t for t in train_tasks if t.question_id not in used]
+    train_tasks = evenly_spaced(train_tasks, args.num_tasks)
     return all_tasks, train_tasks, val_tasks, args.train_dir / "train_databases"
 
 
