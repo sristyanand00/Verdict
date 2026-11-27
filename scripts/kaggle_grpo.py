@@ -171,6 +171,12 @@ def main() -> int:
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     # Less memory lost to fragmentation, which matters on a 15 GB T4.
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    # Without a GPU every step still runs, hundreds of times slower, so stop here.
+    import torch
+
+    if not torch.cuda.is_available():
+        print("No GPU: set Accelerator to GPU T4 x2 in the notebook's session options, then run again")
+        return 1
     (OUT / "logs").mkdir(parents=True, exist_ok=True)
     # train_grpo.py writes training_results.json here; the repo folder is removed at the end.
     os.environ["VERDICT_RESULTS_ROOT"] = str(OUT / "eval")
