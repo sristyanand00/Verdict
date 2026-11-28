@@ -6,21 +6,22 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { LevelBadge, ReasonChip } from '../components/LevelBadge'
 import { DatabasePicker } from '../components/DatabasePicker'
 import { Receipt } from '../components/Receipt'
+import { Replay, replayOn, setReplay } from '../components/Replay'
 import { ResultTable, SqlBlock } from '../components/ResultTable'
 import { api, ApiError, notifyChanged } from '../lib/api'
 import { useDatabase } from '../lib/database'
-import { formatDate, seconds, timeAgo } from '../lib/format'
+import { formatDate, seconds } from '../lib/format'
 import { describeError } from '../lib/errors'
 import { useSession } from '../lib/session'
-import type { AskResponse, AskSummary, Level } from '../lib/types'
+import type { AskResponse, Level } from '../lib/types'
 
 // Example questions, only for databases we know. Other databases show none.
 const TRY: Record<string, string[]> = {
   olist: [
-    'What were sales in Sao Paulo in August 2018?',
-    'What was our revenue in 2017?',
-    'What was our advertising ROI in 2018?',
+    'How many orders were canceled?',
+    'Which payment type is used most often?',
     'How many orders were delivered late in 2018?',
+    'What was our return on ad spend in 2018?',
   ],
 }
 
@@ -45,12 +46,15 @@ export default function Ask() {
   const { me } = useSession()
   const { current: db, databases, choose } = useDatabase()
   const [current, setCurrent] = useState<AskResponse | null>(null)
-  const [recent, setRecent] = useState<AskSummary[]>([])
   const [receipt, setReceipt] = useState(false)
+  // a stored answer being shown step by step (recordings only, see Replay.tsx)
+  const [replaying, setReplaying] = useState<AskResponse | null>(null)
 
+  const replayParam = params.get('replay')
   useEffect(() => {
-    api.recentAsks().then(setRecent).catch(() => setRecent([]))
-  }, [])
+    if (replayParam === '1') setReplay(true)
+    if (replayParam === '0') setReplay(false)
+  }, [replayParam])
 
   // /ask?id=... opens a past question (from History, Saved or the review queue)
   // /ask?db=...&q=... (from "Ask a similar question") picks that database and fills in the question
@@ -80,11 +84,12 @@ export default function Ask() {
     setError(null)
     setNoCredits(null)
     setCurrent(null)
+    setReplaying(null)
     if (idParam || dbParam || qParam) setParams({}, { replace: true })
     try {
       const res = await api.ask(text, db.id)
-      setCurrent(res)
-      setRecent(await api.recentAsks())
+      if (res.cache_hit && replayOn()) setReplaying(res)
+      else setCurrent(res)
       notifyChanged()
     } catch (e) {
       if (e instanceof ApiError && e.status === 402) setNoCredits(e.message)
@@ -100,19 +105,8 @@ export default function Ask() {
     submit(question)
   }
 
-  async function open(id: string) {
-    setError(null)
-    try {
-      const a = await api.getAsk(id)
-      setCurrent(a)
-      choose(a.database_id)
-    } catch (e) {
-      setError({ title: 'Could not open that question', text: e instanceof Error ? e.message : '' })
-    }
-  }
-
   return (
-    <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_20rem]">
+    <div className="mx-auto max-w-4xl">
       <div className="min-w-0">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -129,12 +123,12 @@ export default function Ask() {
           <input
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder="What were sales in Sao Paulo in August 2018?"
+            placeholder="How many orders were canceled?"
             aria-label="Your question"
             className="min-w-0 flex-1 bg-transparent px-3 text-lg text-ink placeholder:text-muted/60 focus:outline-none"
           />
-          <button type="submit" disabled={loading || !question.trim() || !db} className="rounded-xl bg-brand px-7 py-3 font-bold text-on-brand disabled:opacity-50">
-            {loading ? 'Checking...' : 'Ask'}
+          <button type="submit" disabled={loading || !!replaying || !question.trim() || !db} className="rounded-xl bg-brand px-7 py-3 font-bold text-on-brand disabled:opacity-50">
+            {loading || replaying ? 'Checking...' : 'Ask'}
           </button>
         </form>
         {me && me.user.role === 'admin' && <p className="mb-3 text-xs text-muted">Your own questions are free (provider account).</p>}
@@ -157,6 +151,9 @@ export default function Ask() {
         {databases && !db && <p className="mb-8 text-sm text-muted">Pick a database to ask a question.</p>}
 
         {loading && <Loading question={question} />}
+        {replaying && !loading && (
+          <Replay ask={replaying} onDone={() => { setCurrent(replaying); setReplaying(null) }} />
+        )}
         {noCredits && (
           <div className="rounded-2xl border border-lv-yellow/50 bg-lv-yellow-tint p-5">
             <div className="mb-1 font-bold text-lv-yellow">No credits left</div>
@@ -173,40 +170,12 @@ export default function Ask() {
           </div>
         )}
         {current && !loading && <VerdictCard key={current.ask_id} ask={current} onReceipt={() => setReceipt(true)} />}
-        {!current && !loading && !error && !noCredits && (
+        {!current && !replaying && !loading && !error && !noCredits && (
           <div className="rounded-2xl border border-dashed border-line p-10 text-center text-muted">
             Your answer will appear here, with its verdict first.
           </div>
         )}
       </div>
-
-      {/* recent questions */}
-      <aside className="min-w-0">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-xs font-extrabold uppercase tracking-[0.14em] text-muted">Recent questions</h2>
-          <Link to="/history" className="text-xs text-brand-text hover:underline">All history</Link>
-        </div>
-        {recent.length === 0 ? (
-          <p className="text-sm text-muted">Nothing asked yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {recent.slice(0, 8).map((r) => (
-              <li key={r.ask_id}>
-                <button
-                  onClick={() => open(r.ask_id)}
-                  className={`w-full rounded-xl border bg-surface p-3 text-left hover:border-brand ${current?.ask_id === r.ask_id ? 'border-brand' : 'border-line'}`}
-                >
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <LevelBadge level={r.level} />
-                    <span className="text-[0.7rem] text-muted">{timeAgo(r.created_at)}</span>
-                  </div>
-                  <div className="text-sm leading-snug">{r.question}</div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </aside>
 
       {receipt && current && <Receipt ask={current} onClose={() => setReceipt(false)} />}
     </div>
@@ -383,6 +352,7 @@ function VerdictCard({ ask, onReceipt }: { ask: AskResponse; onReceipt: () => vo
 
         <span className="ml-auto text-xs text-muted">
           {ask.cache_hit && ask.cached_at ? `Answered from cache, first checked at ${formatDate(ask.cached_at)}. ` : ''}
+          {ask.cache_stale ? 'The model is not reachable now, so this is the answer from before the last knowledge change. ' : ''}
           {ask.model_label}, {seconds(ask.latency_ms)}
         </span>
       </div>

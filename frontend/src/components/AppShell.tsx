@@ -17,7 +17,6 @@ const PAGES: { to: string; label: string }[] = [
   { to: '/metrics', label: 'Metrics' },
   { to: '/review', label: 'Review queue' },
   { to: '/knowledge', label: 'Knowledge' },
-  { to: '/trust', label: 'Trust Report' },
 ]
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>

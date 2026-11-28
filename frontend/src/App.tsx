@@ -15,7 +15,6 @@ import Login from './screens/Login'
 import Review from './screens/Review'
 import ReviewDetail from './screens/ReviewDetail'
 import Saved from './screens/Saved'
-import TrustReport from './screens/TrustReport'
 
 // The working pages need a logged-in user; send everyone else to the login page.
 function RequireLogin({ children }: { children: ReactNode }) {
@@ -58,7 +57,6 @@ export default function App() {
             <Route path="/review" element={<Review />} />
             <Route path="/review/:id" element={<ReviewDetail />} />
             <Route path="/knowledge" element={<Knowledge key="learned" mode="learned" />} />
-            <Route path="/trust" element={<TrustReport />} />
             <Route
               path="/arena"
               element={

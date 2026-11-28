@@ -5,7 +5,7 @@
 export type Level = 'trusted' | 'review' | 'reject'
 
 export type Reason = {
-  // not_in_data, two_meanings, failed, low_agreement, agreement, empty, conflict, second_model, not_empty
+  // not_in_data, two_meanings, failed, low_agreement, agreement, empty, zero, conflict, second_model, not_empty
   code: string
   text: string
 }
@@ -98,6 +98,7 @@ export type AskResponse = {
   elapsed_ms?: number // proposed: time the chosen SQL took
   cache_hit?: boolean // answered from the cache; cached_at is when it was first checked
   cached_at?: string | null
+  cache_stale?: boolean // model was down: this is the answer saved before the last knowledge change
 }
 
 export type AskSummary = {

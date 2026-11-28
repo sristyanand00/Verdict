@@ -16,11 +16,23 @@ import { formatDate, seconds } from '../lib/format'
 import { useSession } from '../lib/session'
 import type { ArenaRunResponse, ArenaRunResult, ArenaScore, ModelInfo } from '../lib/types'
 
-const MAX_MODELS = 4
+const MAX_MODELS = 3
+
+// The Arena shows three robots, in this order: one strong outside model,
+// the base model before training, and the trained model.
+const OUTSIDE_FIRST = 'gemini'
+
+function arenaThree(list: ModelInfo[]): ModelInfo[] {
+  const outside = list.filter((m) => m.kind === 'outside')
+  const strong = outside.find((m) => m.id === OUTSIDE_FIRST) ?? outside.find((m) => m.reachable) ?? outside[0]
+  const base = list.find((m) => m.kind === 'base')
+  const own = list.find((m) => m.kind === 'own')
+  return [strong, base, own].filter((m): m is ModelInfo => !!m)
+}
 
 // Example questions, only for databases we know. Other databases show none.
 const TRY: Record<string, string[]> = {
-  olist: ['How many orders were delivered late in 2018?', 'What was our revenue in 2017?', 'Which product category sold the most items in 2017?'],
+  olist: ['How many orders were canceled?', 'Which payment type is used most often?', 'How many orders were delivered late in 2018?'],
 }
 
 // GET /api/arena/{key} is not described field by field in docs/API.md. This page shows it only
@@ -67,12 +79,9 @@ export default function Arena() {
     api
       .models()
       .then((list) => {
-        setModels(list)
-        // start with the trained model, the base model and the outside models, up to the limit
-        const own = list.filter((m) => m.kind === 'own').map((m) => m.id)
-        const base = list.filter((m) => m.kind === 'base').map((m) => m.id)
-        const outside = list.filter((m) => m.kind === 'outside' && m.reachable).map((m) => m.id)
-        setPicked([...own, ...base, ...outside].slice(0, MAX_MODELS))
+        const three = arenaThree(list)
+        setModels(three)
+        setPicked(three.map((m) => m.id))
       })
       .catch((e) => setModelsError(e instanceof Error ? e.message : 'Could not load the models'))
     api
@@ -130,7 +139,9 @@ export default function Arena() {
     void start(question)
   }
 
-  const columns = run ? run.results : runModels.map((m) => ({ model_id: m.id, label: m.label, kind: m.kind }))
+  // Before the first run the picked models stand ready, so the robots are on the page from the start.
+  const standing = running ? runModels : (models ?? []).filter((m) => picked.includes(m.id))
+  const columns = run ? run.results : standing.map((m) => ({ model_id: m.id, label: m.label, kind: m.kind }))
   const cacheHits = run?.results.filter((r) => r.cache_hit).length ?? 0
 
   return (
@@ -332,6 +343,7 @@ function ModelColumn({
         </div>
 
         {running && <p className="mt-4 text-sm text-muted">Working...</p>}
+        {!running && !result && <p className="mt-4 text-sm text-muted">Ready. Ask a question above.</p>}
         {result && <ResultBody r={result} />}
       </div>
     </div>

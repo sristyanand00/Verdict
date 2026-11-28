@@ -27,7 +27,6 @@ export default function Landing() {
         <Logo />
         <nav className="flex gap-[1.375rem] text-[0.8125rem] tracking-wide text-muted">
           <a href="#how">How it works</a>
-          <Link to="/trust">Trust Report</Link>
           <Link to="/arena">Model Arena</Link>
         </nav>
         <div className="flex-1" />
