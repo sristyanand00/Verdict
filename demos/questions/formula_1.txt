@@ -1,0 +1,9 @@
+# Demo questions for formula_1. One per line. Expected answers: demos/questions/EXPECTED.md
+How many drivers are there?
+How many races were held in 2009?
+How many drivers are British?
+Which driver has won the most races?
+Which constructor has the most race wins?
+How many races did Lewis Hamilton win in 2008?
+Which country has the most circuits?
+What was the average ticket price at the 2017 races?

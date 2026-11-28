@@ -1,0 +1,57 @@
+{
+  "overall": {
+    "questions": 1534,
+    "correct": 686,
+    "ran": 1362,
+    "accuracy": 0.4471968709256845,
+    "ran_rate": 0.8878748370273793,
+    "accuracy_low": 0.4224779391519823,
+    "accuracy_high": 0.47217961205485204
+  },
+  "simple": {
+    "questions": 925,
+    "correct": 485,
+    "ran": 845,
+    "accuracy": 0.5243243243243243,
+    "ran_rate": 0.9135135135135135,
+    "accuracy_low": 0.4921061387897108,
+    "accuracy_high": 0.5563413037020982
+  },
+  "moderate": {
+    "questions": 464,
+    "correct": 157,
+    "ran": 397,
+    "accuracy": 0.33836206896551724,
+    "ran_rate": 0.8556034482758621,
+    "accuracy_low": 0.29679344129365165,
+    "accuracy_high": 0.38258522020203406
+  },
+  "challenging": {
+    "questions": 145,
+    "correct": 44,
+    "ran": 120,
+    "accuracy": 0.30344827586206896,
+    "ran_rate": 0.8275862068965517,
+    "accuracy_low": 0.23448664658031904,
+    "accuracy_high": 0.38255590066453715
+  },
+  "model": "/kaggle/working/grpo_v2/best",
+  "seconds": 3169.5444765090942,
+  "failures": {
+    "unknown column": 152,
+    "unknown table": 1,
+    "syntax error": 11,
+    "timeout": 1,
+    "ambiguous column": 4,
+    "unknown function": 3
+  },
+  "gold_failed": 2,
+  "settings": {
+    "max_schema_chars": 12000,
+    "timeout_s": 30.0,
+    "workers": 4,
+    "max_tokens": 256,
+    "gen_batch": 8,
+    "rescore": false
+  }
+}

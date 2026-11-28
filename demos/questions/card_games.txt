@@ -1,0 +1,9 @@
+# Demo questions for card_games. One per line. Expected answers: demos/questions/EXPECTED.md
+How many sets are there?
+Which artist illustrated the most cards?
+How many mythic rarity cards are there?
+Which set was released first?
+Which language has the most foreign card entries?
+How many cards are there?
+How many cards are banned in modern?
+What is the market price of Black Lotus?

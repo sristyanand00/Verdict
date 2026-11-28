@@ -1,0 +1,62 @@
+{
+  "config": {
+    "model": "/tmp/sft_v2_from_gguf",
+    "epochs": 1,
+    "batch_size": 4,
+    "lr": 1e-05,
+    "num_generations": 8,
+    "max_tokens": 256,
+    "temperature": 0.9,
+    "gradient_accumulation_steps": 1,
+    "micro_batch_size": 2,
+    "save_every": 10,
+    "eval_max_tasks": 100,
+    "max_schema_chars": 12000,
+    "checkpoint_dir": "/kaggle/working/grpo_v2",
+    "num_tasks": 1100,
+    "seed": 42,
+    "device": "cuda",
+    "train_ratio": 0.8,
+    "no_stratified": false,
+    "train_dir": "/tmp/bird_train",
+    "val_size": 200,
+    "split_seed": 0,
+    "task_ids": null,
+    "exclude_sampled": 500,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "init_adapter": "/kaggle/input/notebooks/sristyanand/notebook18cd94e691/grpo_v1/best"
+  },
+  "learning_rate": 1e-05,
+  "data": {
+    "total_tasks": 9428,
+    "train_tasks": 1100,
+    "val_tasks": 200,
+    "distribution": {
+      "unknown": 1100
+    }
+  },
+  "training": {
+    "duration_s": 23572.121317625046,
+    "metrics": {
+      "reward_mean": [
+        0.5653068181818182
+      ],
+      "reward_std": [
+        0.4696877797090934
+      ],
+      "accuracy": [
+        0.5373863636363636
+      ],
+      "loss": [
+        -0.0004831605480826924
+      ],
+      "val_accuracy": [
+        0.49
+      ]
+    },
+    "checkpoint_dir": "/kaggle/working/grpo_v2",
+    "best_val_accuracy": 0.49,
+    "val_accuracy_before": 0.49
+  }
+}

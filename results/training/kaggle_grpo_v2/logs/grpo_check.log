@@ -1,0 +1,36 @@
+
+=== start 2026-11-27 07:40:07: /usr/bin/python3 scripts/train_grpo.py --train-dir /tmp/bird_train --model /tmp/sft_v2_from_gguf --lora-r 16 --lr 1e-5 --epochs 1 --num-tasks 20 --eval-max-tasks 20 --checkpoint-dir /tmp/grpo_check --max-schema-chars 12000 --micro-batch-size 2 --save-every 2 --init-adapter /kaggle/input/notebooks/sristyanand/notebook18cd94e691/grpo_v1/best --exclude-sampled 500
+2026-11-27 07:40:22,599 - __main__ - INFO - Loaded 9428 tasks; train 20 {'unknown': 20}, val 200
+Starting from adapter /kaggle/input/notebooks/sristyanand/notebook18cd94e691/grpo_v1/best (base model /tmp/sft_v2_from_gguf)
+Loading model: /tmp/sft_v2_from_gguf
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:  28%|██▊       | 95/338 [00:00<00:00, 939.52it/s]Loading weights:  56%|█████▌    | 189/338 [00:00<00:00, 894.75it/s]Loading weights:  83%|████████▎ | 279/338 [00:00<00:00, 809.90it/s]Loading weights: 100%|██████████| 338/338 [00:00<00:00, 866.21it/s]
+Trainable parameters: 18,464,768 of 1,562,179,072 (1.18%)
+
+Training: 20 tasks, 1 epochs, batch 4 x 8 completions, validation: 20 tasks
+GPU: Tesla T4 (15.6 GB)
+  evaluated 20 val tasks in 93s: 65.0% correct, 90.0% ran
+  failed because: timeout 2
+Validation accuracy before training: 65.0%
+
+======================================================================
+EPOCH 1/1
+======================================================================
+[epoch 1/1 batch 1/5] correct 8/32, ran 24/32, loss -0.0001 | gen 51s, sql 0s, update 37s
+[epoch 1/1 batch 2/5] correct 26/32, ran 29/32, loss -0.0015 | gen 54s, sql 1s, update 47s
+Saved checkpoint: /tmp/grpo_check/latest (epoch 1)
+[epoch 1/1 batch 3/5] correct 24/32, ran 28/32, loss -0.0025 | gen 50s, sql 0s, update 44s
+[epoch 1/1 batch 4/5] correct 17/32, ran 28/32, loss -0.0003 | gen 48s, sql 1s, update 19s
+Saved checkpoint: /tmp/grpo_check/latest (epoch 1)
+[epoch 1/1 batch 5/5] correct 18/32, ran 29/32, loss -0.0000 | gen 66s, sql 1s, update 37s
+  evaluated 20 val tasks in 90s: 70.0% correct, 100.0% ran
+
+Epoch 1 done in 458s | reward 0.6094 +/- 0.4612 | train accuracy 58.1% | val accuracy 70.0%
+Saved checkpoint: /tmp/grpo_check/latest (epoch 1)
+Saved checkpoint: /tmp/grpo_check/best (epoch 1)
+2026-11-27 07:51:22,201 - __main__ - INFO - Training finished in 10.7 minutes
+2026-11-27 07:51:22,201 - __main__ - INFO - Reward: first epoch 0.6094, last epoch 0.6094
+2026-11-27 07:51:22,201 - __main__ - INFO - Validation accuracy: 65.0% before, best 70.0% after
+2026-11-27 07:51:22,201 - __main__ - INFO - Results: /kaggle/working/eval/training_results.json
+2026-11-27 07:51:22,202 - __main__ - INFO - Checkpoints: /tmp/grpo_check (latest/ and best/)
+
+=== end 2026-11-27 07:51:25: exit code 0, 11.3 minutes

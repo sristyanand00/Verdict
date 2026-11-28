@@ -42,6 +42,7 @@ There are three levels: `trusted`, `review` and `reject`. Every answer carries a
 | `low_agreement` | reject | Agreement is below the review level. |
 | `agreement` | review / trusted | Review: some agree, but not enough. Trusted: the agreement count. |
 | `empty` | review | The answer is empty or only NULL. |
+| `zero` | review | The whole answer is a single 0. A filter on a value the data does not use ('female' when the column holds 'F') also counts 0 rows, and several attempts easily make the same mistake, so a 0 is never Trusted on agreement alone. The `not_empty` check fails with the same reason. |
 | `conflict` | review | Differs from an approved answer to a near-identical question. |
 | `second_model` | review / trusted | The second model disagrees (review) or agrees (trusted). |
 | `not_empty` | trusted | The answer has values. |
@@ -98,6 +99,36 @@ type AdminUserRow = User & { balance: number; used_total: number; asks_count: nu
 | `POST /api/admin/users/{id}/credits` | `{amount, note}` | The updated `AdminUserRow`. `amount` is a whole number, not 0: positive writes a `grant` row, negative a `remove` row. 400 if the balance would go below 0. 404 for an unknown user. |
 | `GET /api/admin/cache` | | Cached questions: `[{database_id, question, created_at}]`, newest first |
 | `DELETE /api/admin/cache?database_id=` | | `{ok: true, removed}`. Empties the answer cache, for one database or all. |
+| `GET /api/admin/stats` | | Usage and performance; see below. |
+
+### `GET /api/admin/stats`
+
+Every question run is written to a usage log: asks and Arena runs, answered, from the cache, or failed (busy, time limit, model down, server error). This endpoint sums it up. Times are milliseconds; days are UTC.
+
+```
+{
+  generated_at,
+  totals: { today, last_7_days, all_time },   // each a Summary
+  per_day: [ {day, runs, answered, failed, avg_ms, p95_ms} ],   // last 14 days, oldest first
+  by_model: [ {model, label, runs, answered, failed, avg_ms, p95_ms, prompt_tokens, completion_tokens} ],
+  recent_failures: [ {created_at, kind, database_id, model, outcome, total_ms} ],   // newest first, at most 10
+  users: { total, active_7_days },
+  review: { open, resolved, flagged_trusted },
+  settings: { attempts, max_concurrent_asks, ask_timeout_s, cache },
+  machine: { cpu_count, cpu_percent, load_avg, ram_total_mb, ram_used_mb, ram_percent,
+             disk_total_gb, disk_free_gb, app_db_mb, gpus: [ {name, util_percent, mem_used_mb, mem_total_mb} ] }
+}
+
+Summary = { runs, asks, arena_runs, answered, from_cache,
+            failed: {busy, timeout, model_down, error},
+            levels: {trusted, review, reject},
+            avg_ms, p95_ms, avg_model_ms,        // fresh answers only; null when there are none
+            prompt_tokens, completion_tokens, active_users }
+```
+
+- `avg_ms` and `p95_ms` count only fresh answers: a cache hit takes no time and would make the service look faster than it is.
+- `flagged_trusted`: Trusted answers an analyst flagged as wrong. The number that matters most for trust.
+- A `machine` figure that cannot be read is `null` (`load_avg` on Windows); `gpus` is `[]` without an NVIDIA GPU.
 | `POST /api/admin/users/{id}/active` | `{active}` | The updated `AdminUserRow`. Turning an account off also ends its logins. 400 if the provider turns off their own account. |
 
 ## `POST /api/ask`
@@ -152,6 +183,7 @@ Response:
   "model": "qwen",
   "model_label": "Qwen 1.5B (trained), private",
   "latency_ms": 3200,
+  "usage": { "model_ms": 2900, "prompt_tokens": 9800, "completion_tokens": 410 },
   "cache_hit": false,
   "cached_at": null,
   "created_at": "2026-11-19T10:15:02+00:00",
@@ -183,6 +215,7 @@ Field notes:
 - `agreement_level` is the older agreement-only level (`green`, `yellow`, `red` or `unanswerable`). It is kept for evaluation. The frontend can ignore it.
 - `cache_hit` and `cached_at` (added 26 Nov): a repeated question (same database, same words ignoring case and spacing, same model and attempts, and no change to that database's knowledge since) is answered from the cache. `cache_hit` is then `true` and `cached_at` is when the answer was first made; show it ("Answered from cache, first checked at ..."). It is still saved as the user's own ask, goes to the review queue if not trusted, and is charged like any answer. Any approval, fix, meaning or known number on that database makes the next ask run fresh.
 - `review_id`: anything that is not trusted is added to the review queue, and this is that item's id.
+- `usage` (added 26 Nov): `model_ms` is the time spent waiting for the model; the rest of `latency_ms` is running the SQL and the checks. `prompt_tokens` and `completion_tokens` add up all attempts, as the model server reports them (0 when it does not). All three are 0 on a cache hit, because no model was called. Older saved asks have no `usage`.
 
 ## Asks
 
@@ -327,6 +360,7 @@ Response:
 - `status`: `ok`; `off` (outside models are turned off on this server, `VERDICT_ARENA_OUTSIDE`); or `error` (that model failed, for example quota or time limit; `error` says why in plain words). One model failing does not stop the others.
 - `agree`: attempts in the largest group. `rows`: at most 20.
 - Arena runs use no credits: `credits_charged` is always 0.
+- `fresh: true` in the request skips the cache and leaves it unchanged (used by `scripts/load_test.py`).
 - A repeated run is answered from the cache (`cache_hit: true`), so outside models are not called again.
 
 ## Changes from plan section 8
@@ -337,4 +371,5 @@ Response:
 - `/asks/{id}/choose` is now used by the analyst, not a manager. It approves the chosen reading.
 - New: `/asks/{id}/flag`, `attempts`, `missing`, `tables_available`, `agreement_level`, `review_id`, and `key` on each check.
 - 25 Nov: login, accounts, credits and the provider panel; asks, review items and saved answers belong to their user; `/api/saved`; `/asks/{id}/events`; check status `info`; `kind` on `/api/models` is now `own` or `outside`; `/api/arena/models`. This replaces frontend/ACCOUNTS-API.md.
+- 26 Nov: `GET /api/admin/stats` and `usage` on each answer; reason `zero` (a single 0 is never Trusted on agreement alone); Arena `fresh`.
 - 26 Nov: the Model Arena is provider only, uses no credits, and adds `kind: base` (the untrained Qwen) and OpenAI-style outside models (ChatGPT, Groq) when their keys are set.

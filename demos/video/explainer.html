@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Verdict explainer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #030407;
+    --surface: #0B0F17;
+    --surface-2: #111724;
+    --line: #232B3B;
+    --ink: #EEF1F6;
+    --muted: #8C95A6;
+    --brand: #1558C9;
+    --brand-text: #6C9DF2;
+    --accent: #D4FF24;
+    --ok: #2FBF71;
+    --warn: #F2B233;
+    --bad: #F0564A;
+    --sans: "Segoe UI", Inter, system-ui, -apple-system, Arial, sans-serif;
+    --mono: Consolas, "Cascadia Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); overflow: hidden; }
+  body { font-family: var(--sans); color: var(--ink); }
+  body.playing { cursor: none; }
+
+  /* The stage is always 1920 x 1080 and is scaled to fit the window. */
+  #stage {
+    position: absolute; left: 50%; top: 50%;
+    width: 1920px; height: 1080px;
+    transform-origin: 0 0;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  .scene { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .35s ease; }
+  .scene.on { opacity: 1; visibility: visible; }
+  .abs { position: absolute; }
+
+  .kicker {
+    position: absolute; left: 96px; top: 70px;
+    font-size: 22px; letter-spacing: .16em; text-transform: uppercase; color: var(--brand-text); font-weight: 700;
+  }
+  .kicker b { color: var(--accent); margin-right: 14px; }
+  .title {
+    position: absolute; left: 96px; top: 112px; width: 1728px;
+    font-size: 54px; line-height: 1.12; font-weight: 800; letter-spacing: -.015em;
+  }
+  .mono { font-family: var(--mono); }
+  .muted { color: var(--muted); }
+  .card { background: var(--surface); border: 2px solid var(--line); border-radius: 10px; }
+
+  /* Animations run only while a scene is on. Delay comes from --d. */
+  .a { opacity: 0; }
+  .scene.on .rise { animation: rise .6s cubic-bezier(.2,.7,.2,1) var(--d, 0s) both; }
+  .scene.on .fade { animation: fade .6s ease var(--d, 0s) both; }
+  .scene.on .pop  { animation: pop .45s cubic-bezier(.2,1.4,.4,1) var(--d, 0s) both; }
+  .scene.on .drop { animation: drop .7s cubic-bezier(.3,1.3,.5,1) var(--d, 0s) both; }
+  .scene.on .slide { animation: slide .7s cubic-bezier(.2,.7,.2,1) var(--d, 0s) both; }
+  .scene.on .draw { animation: draw .7s ease var(--d, 0s) both; }
+  .scene.on .grow { animation: grow 1.1s cubic-bezier(.2,.7,.2,1) var(--d, 0s) both; }
+  .scene.on .widen { animation: widen .8s cubic-bezier(.2,.7,.2,1) var(--d, 0s) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes pop  { from { opacity: 0; transform: scale(.6) rotate(var(--r, 0deg)); } to { opacity: 1; transform: scale(1) rotate(var(--r, 0deg)); } }
+  @keyframes drop { from { opacity: 0; transform: translateY(-160px); } to { opacity: 1; transform: none; } }
+  @keyframes slide { from { opacity: 0; transform: translateX(140px); } to { opacity: 1; transform: none; } }
+  @keyframes draw { from { stroke-dashoffset: 1; opacity: 1; } to { stroke-dashoffset: 0; opacity: 1; } }
+  @keyframes grow { from { transform: scaleY(0); opacity: 1; } to { transform: scaleY(1); opacity: 1; } }
+  @keyframes widen { from { transform: scaleX(0); opacity: 1; } to { transform: scaleX(1); opacity: 1; } }
+
+  svg.wires { position: absolute; inset: 0; width: 1920px; height: 1080px; pointer-events: none; }
+  svg.wires path { fill: none; stroke: var(--brand-text); stroke-width: 3; stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0; }
+
+  /* ---- scene 1 ---- */
+  .tile { left: 96px; width: 420px; height: 100px; padding: 16px 24px; }
+  .tile small { display: block; font-size: 20px; color: var(--muted); }
+  .tile strong { font-size: 40px; font-weight: 800; }
+  .sqlchip { left: 720px; width: 420px; height: 64px; padding: 0 22px; display: flex; align-items: center; font-size: 22px; color: var(--brand-text); }
+  .aichip { left: 1380px; top: 410px; width: 440px; height: 120px; padding: 22px 28px; border-color: var(--brand); }
+  .aichip strong { display: block; font-size: 34px; }
+  .aichip span { font-size: 22px; color: var(--muted); }
+  .sq { width: 56px; height: 56px; border-radius: 6px; background: var(--brand-text); }
+  .sq.bad { background: var(--bad); }
+
+  /* ---- scene 2 ---- */
+  .qchip { left: 96px; top: 270px; padding: 16px 28px; font-size: 32px; font-weight: 600; border-color: var(--brand); }
+  .code { left: 96px; top: 390px; width: 1000px; padding: 34px 40px; font-size: 36px; line-height: 1.6; }
+  .code .kw { color: var(--brand-text); }
+  .hl-bad { color: var(--bad); border-bottom: 4px solid var(--bad); }
+  .col { left: 1220px; top: 330px; width: 460px; overflow: hidden; }
+  .col .head { padding: 14px 24px; font-size: 22px; color: var(--muted); border-bottom: 2px solid var(--line); background: var(--surface-2); }
+  .col .row { padding: 11px 24px; font-size: 26px; border-bottom: 1px solid var(--line); }
+  .col .row.hit { color: var(--bg); background: var(--accent); font-weight: 700; }
+  .res { top: 740px; width: 480px; height: 220px; padding: 26px 36px; }
+  .res small { font-size: 22px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+  .res .big { font-size: 110px; font-weight: 800; line-height: 1.05; }
+  .res .note { position: absolute; right: 30px; bottom: 30px; font-size: 22px; color: var(--muted); }
+
+  /* ---- scene 3 ---- */
+  .att { width: 400px; height: 150px; padding: 18px 22px; }
+  .att small { font-size: 18px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+  .att p { margin-top: 10px; font-size: 21px; line-height: 1.4; color: var(--ink); }
+  .att .tag { position: absolute; right: 16px; top: 14px; font-size: 16px; color: var(--brand-text); border: 1.5px solid var(--brand); border-radius: 4px; padding: 2px 8px; }
+  .scene.on .att { animation: rise .5s cubic-bezier(.2,.7,.2,1) var(--d, 0s) both, boxed .5s ease calc(var(--d, 0s) + 3.2s) forwards; }
+  @keyframes boxed { to { border-color: var(--brand); } }
+  .pill { top: 700px; width: 544px; height: 104px; padding: 18px 26px; border-color: var(--brand); }
+  .pill strong { display: block; font-size: 28px; }
+  .pill span { font-size: 21px; color: var(--muted); }
+
+  /* ---- scene 4 ---- */
+  .grp { left: 96px; width: 820px; height: 120px; padding: 0 30px; display: flex; align-items: center; gap: 28px; }
+  .grp .val { width: 200px; font-size: 58px; font-weight: 800; }
+  .grp .bar { height: 26px; border-radius: 4px; background: var(--brand-text); transform-origin: left center; }
+  .grp .cnt { margin-left: auto; font-size: 26px; color: var(--muted); white-space: nowrap; }
+  .vrow { left: 1010px; width: 814px; height: 140px; display: flex; align-items: center; gap: 30px; }
+  .stamp { width: 270px; text-align: center; padding: 14px 0; font-size: 34px; font-weight: 800; letter-spacing: .08em; border: 4px solid currentColor; border-radius: 8px; }
+  .vrow p { font-size: 27px; line-height: 1.3; color: var(--ink); }
+  .receipt { left: 96px; top: 880px; width: 1728px; height: 88px; padding: 0 30px; display: flex; align-items: center; gap: 26px; font-size: 25px; border-style: dashed; }
+  .receipt b { color: var(--accent); letter-spacing: .1em; text-transform: uppercase; font-size: 21px; }
+  .receipt span { color: var(--muted); }
+
+  /* ---- scene 5 ---- */
+  .frozen { left: 96px; top: 320px; width: 560px; height: 420px; padding: 34px; background: repeating-linear-gradient(135deg, var(--surface) 0 18px, var(--surface-2) 18px 36px); }
+  .frozen strong { display: block; font-size: 40px; }
+  .frozen span { font-size: 26px; color: var(--muted); }
+  .lora { left: 672px; top: 470px; width: 230px; height: 130px; padding: 22px; border-color: var(--accent); background: #171c0a; }
+  .lora strong { display: block; font-size: 30px; color: var(--accent); }
+  .lora span { font-size: 22px; color: var(--muted); }
+  .axis { left: 1080px; top: 820px; width: 720px; height: 2px; background: var(--line); }
+  .barv { width: 220px; border-radius: 6px 6px 0 0; transform-origin: center bottom; }
+  .barnum { width: 300px; text-align: center; font-size: 72px; font-weight: 800; }
+  .barlab { width: 300px; text-align: center; font-size: 26px; color: var(--muted); }
+
+  /* ---- scene 6 ---- */
+  .node { width: 480px; height: 130px; padding: 22px 26px; }
+  .node strong { display: block; font-size: 30px; }
+  .node span { font-size: 21px; color: var(--muted); }
+  .node.hot { border-color: var(--accent); }
+  .find { left: 96px; top: 770px; width: 1728px; height: 200px; padding: 28px 36px; display: flex; align-items: center; gap: 56px; }
+  .find .lab { font-size: 22px; color: var(--muted); line-height: 1.4; width: 330px; }
+  .find .pair small { display: block; font-size: 21px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+  .find .pair strong { font-size: 64px; font-weight: 800; }
+  .find .say { margin-left: auto; width: 520px; font-size: 30px; line-height: 1.3; font-weight: 600; }
+
+  /* ---- scene 7 ---- */
+  .lap-screen { left: 180px; top: 330px; width: 680px; height: 420px; border: 4px solid var(--line); border-radius: 14px 14px 0 0; background: var(--surface); }
+  .lap-base { left: 110px; top: 750px; width: 820px; height: 28px; border-radius: 0 0 16px 16px; background: var(--line); }
+  .file { left: 260px; top: 470px; width: 520px; padding: 24px 28px; border-color: var(--accent); }
+  .file strong { display: block; font-size: 30px; }
+  .file span { font-size: 26px; color: var(--accent); }
+  .wifi { left: 260px; top: 380px; font-size: 24px; color: var(--muted); display: flex; align-items: center; gap: 12px; }
+  .tests { left: 1080px; top: 330px; }
+  .tests .big { font-size: 200px; font-weight: 800; line-height: 1; color: var(--accent); }
+  .tests p { font-size: 34px; margin-top: 6px; }
+  .stack { left: 1080px; top: 640px; display: flex; gap: 14px; flex-wrap: wrap; width: 760px; }
+  .stack span { font-size: 24px; padding: 10px 18px; border: 2px solid var(--line); border-radius: 6px; color: var(--muted); }
+  .next { left: 1080px; top: 800px; font-size: 40px; font-weight: 700; color: var(--brand-text); }
+
+  /* ---- ready screen, end wipe, helpers ---- */
+  #ready { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; color: var(--muted); font-size: 26px; transition: opacity .3s; }
+  #ready strong { color: var(--ink); font-size: 44px; }
+  #ready kbd { font-family: var(--mono); border: 2px solid var(--line); border-radius: 6px; padding: 2px 12px; color: var(--ink); }
+  #ready.off { opacity: 0; visibility: hidden; }
+  #wipe { position: absolute; inset: 0; background: var(--brand); transform: translateX(-101%); }
+  #wipe.go { animation: wipe 1.1s cubic-bezier(.6,0,.3,1) forwards; }
+  @keyframes wipe { 0% { transform: translateX(-101%); background: var(--brand); } 55% { transform: translateX(0); background: var(--brand); } 100% { transform: translateX(0); background: var(--bg); } }
+
+  #dots { position: absolute; left: 96px; bottom: 44px; display: flex; gap: 10px; }
+  #dots i { width: 44px; height: 4px; background: var(--line); border-radius: 2px; }
+  #dots i.on { background: var(--accent); }
+
+  #practice { position: fixed; left: 0; right: 0; bottom: 0; padding: 14px 24px; background: rgba(0,0,0,.92); border-top: 2px solid var(--accent); font-size: 20px; line-height: 1.4; color: var(--ink); display: none; z-index: 10; }
+  #practice.on { display: flex; gap: 24px; align-items: flex-start; }
+  #practice .clock { font-family: var(--mono); color: var(--accent); white-space: nowrap; }
+  #mode { position: fixed; right: 16px; top: 12px; font: 14px var(--mono); color: var(--muted); z-index: 10; display: none; }
+  #mode.on { display: block; }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- 1. Why it is needed -->
+  <section class="scene">
+    <div class="kicker"><b>01</b>Why this is needed</div>
+    <div class="title a rise">Decisions run on numbers. AI now writes the SQL behind them.</div>
+
+    <div class="abs card tile a rise" style="top:300px;--d:.5s"><small>Orders</small><strong>99,441</strong></div>
+    <div class="abs card tile a rise" style="top:420px;--d:.65s"><small>Canceled orders</small><strong>625</strong></div>
+    <div class="abs card tile a rise" style="top:540px;--d:.8s"><small>Average review score</small><strong>4.09</strong></div>
+
+    <svg class="wires" viewBox="0 0 1920 1080">
+      <path class="draw" pathLength="1" style="--d:1.5s" d="M516 350 H720"/>
+      <path class="draw" pathLength="1" style="--d:1.6s" d="M516 470 H720"/>
+      <path class="draw" pathLength="1" style="--d:1.7s" d="M516 590 H720"/>
+      <path class="draw" pathLength="1" style="--d:2.9s" d="M1140 350 C1260 350 1260 470 1380 470"/>
+      <path class="draw" pathLength="1" style="--d:3.0s" d="M1140 470 H1380"/>
+      <path class="draw" pathLength="1" style="--d:3.1s" d="M1140 590 C1260 590 1260 470 1380 470"/>
+    </svg>
+
+    <div class="abs card sqlchip mono a rise" style="top:318px;--d:2.1s">SELECT COUNT(*) FROM orders</div>
+    <div class="abs card sqlchip mono a rise" style="top:438px;--d:2.2s">… WHERE order_status = …</div>
+    <div class="abs card sqlchip mono a rise" style="top:558px;--d:2.3s">SELECT AVG(review_score) …</div>
+
+    <div class="abs card aichip a rise" style="--d:3.5s"><strong>AI model</strong><span>writes the query</span></div>
+
+    <div class="abs a fade" style="left:96px;top:770px;display:flex;gap:14px;--d:5.6s">
+      <div class="sq"></div><div class="sq"></div><div class="sq"></div><div class="sq"></div><div class="sq bad"></div>
+    </div>
+    <div class="abs a rise" style="left:480px;top:762px;font-size:40px;font-weight:700;--d:6s">Even the best system gets about 1 in 5 wrong.</div>
+    <div class="abs muted a rise" style="left:480px;top:822px;font-size:24px;--d:6.3s">BIRD benchmark leaderboard, dev set: top system 78.5%</div>
+    <div id="dots"></div>
+  </section>
+
+  <!-- 2. The silent failure -->
+  <section class="scene">
+    <div class="kicker"><b>02</b>The silent failure</div>
+    <div class="title a rise">A wrong query does not fail. It returns a clean number.</div>
+
+    <div class="abs card qchip a rise" style="--d:.5s">&ldquo;How many orders were canceled?&rdquo;</div>
+
+    <div class="abs card code mono a rise" style="--d:1.2s">
+      <span class="kw">SELECT</span> COUNT(*)<br>
+      <span class="kw">FROM</span> orders<br>
+      <span class="kw">WHERE</span> order_status = <span id="badlit">'CANCELED'</span>
+    </div>
+
+    <div class="abs card col mono a rise" style="--d:3.4s">
+      <div class="head">orders.order_status</div>
+      <div class="row">delivered</div>
+      <div class="row">shipped</div>
+      <div class="row" id="hitrow">canceled</div>
+      <div class="row">invoiced</div>
+      <div class="row">processing</div>
+      <div class="row" style="border-bottom:0">unavailable</div>
+    </div>
+
+    <div class="abs card res a rise" style="left:96px;--d:2.2s">
+      <small>AI answer</small><div class="big">0</div><div class="note">no error &middot; no warning</div>
+    </div>
+    <div class="abs card res a pop" style="left:616px;border-color:var(--accent);--d:6.6s">
+      <small>Real answer</small><div class="big" style="color:var(--accent)">625</div><div class="note" style="bottom:auto;top:30px">capitals vs small letters</div>
+    </div>
+  </section>
+
+  <!-- 3. Eight attempts in a sandbox -->
+  <section class="scene">
+    <div class="kicker"><b>03</b>Eight attempts, each in a sandbox</div>
+    <div class="title a rise">Ask eight times. Run every query safely.</div>
+
+    <div class="abs card att a" style="left:96px;top:290px;--d:.6s"><small>Attempt 1</small><span class="tag a fade" style="--d:3.8s">own process</span><p class="mono">COUNT(*) …<br>status = 'canceled'</p></div>
+    <div class="abs card att a" style="left:528px;top:290px;--d:.75s"><small>Attempt 2</small><span class="tag a fade" style="--d:3.9s">own process</span><p class="mono">COUNT(order_id) …<br>status = 'canceled'</p></div>
+    <div class="abs card att a" style="left:960px;top:290px;--d:.9s"><small>Attempt 3</small><span class="tag a fade" style="--d:4.0s">own process</span><p class="mono">SUM(CASE WHEN status<br>= 'canceled' …)</p></div>
+    <div class="abs card att a" style="left:1392px;top:290px;--d:1.05s"><small>Attempt 4</small><span class="tag a fade" style="--d:4.1s">own process</span><p class="mono">COUNT(*) …<br>LOWER(status) = 'canceled'</p></div>
+    <div class="abs card att a" style="left:96px;top:472px;--d:1.2s"><small>Attempt 5</small><span class="tag a fade" style="--d:4.2s">own process</span><p class="mono">COUNT(*) …<br>status LIKE 'cancel%'</p></div>
+    <div class="abs card att a" style="left:528px;top:472px;--d:1.35s"><small>Attempt 6</small><span class="tag a fade" style="--d:4.3s">own process</span><p class="mono">COUNT(DISTINCT order_id)<br>… 'canceled'</p></div>
+    <div class="abs card att a" style="left:960px;top:472px;--d:1.5s"><small>Attempt 7</small><span class="tag a fade" style="--d:4.4s">own process</span><p class="mono">COUNT(*) …<br>status = 'CANCELED'</p></div>
+    <div class="abs card att a" style="left:1392px;top:472px;--d:1.65s"><small>Attempt 8</small><span class="tag a fade" style="--d:4.5s">own process</span><p class="mono">COUNT(*) … status IN<br>('canceled','unavailable')</p></div>
+
+    <div class="abs card pill a rise" style="left:96px;--d:5.4s"><strong>Read-only connection</strong><span>the data cannot be changed</span></div>
+    <div class="abs card pill a rise" style="left:688px;--d:6.2s"><strong>Authorizer inside SQLite</strong><span>the database itself allows only reads</span></div>
+    <div class="abs card pill a rise" style="left:1280px;--d:7s"><strong>Time limit</strong><span>the process is killed at 5 seconds</span></div>
+
+    <div class="abs muted a fade" style="left:96px;top:860px;font-size:24px;--d:7.8s">Temperature 0.8, so the attempts differ. The queries shown are an illustration.</div>
+  </section>
+
+  <!-- 4. Group by result, then decide -->
+  <section class="scene">
+    <div class="kicker"><b>04</b>Group by result, then decide</div>
+    <div class="title a rise">Different SQL, same answer: that counts as agreement.</div>
+
+    <div class="abs card grp a rise" style="top:300px;--d:.6s"><div class="val">625</div><div class="bar a widen" style="width:330px;--d:1.2s"></div><div class="cnt">6 of 8</div></div>
+    <div class="abs card grp a rise" style="top:440px;--d:.8s"><div class="val">0</div><div class="bar a widen" style="width:55px;background:var(--muted);--d:1.4s"></div><div class="cnt">1 of 8</div></div>
+    <div class="abs card grp a rise" style="top:580px;--d:1s"><div class="val">1,234</div><div class="bar a widen" style="width:55px;background:var(--muted);--d:1.6s"></div><div class="cnt">1 of 8</div></div>
+    <div class="abs muted a fade" style="left:96px;top:730px;width:820px;font-size:24px;line-height:1.4;--d:2.2s">Six different queries, one result. Numbers are compared as values, so 625 and 625.0 are the same answer.</div>
+
+    <div class="abs vrow" style="top:290px"><div class="stamp a pop" style="color:var(--ok);--r:-2deg;--d:4.2s">TRUSTED</div><p class="a rise" style="--d:4.4s">6 of 8 agree, and the answer has values</p></div>
+    <div class="abs vrow" style="top:450px"><div class="stamp a pop" style="color:var(--warn);--r:1.5deg;--d:6.2s">REVIEW</div><p class="a rise" style="--d:6.4s">a split, an empty answer or a zero:<br>an analyst decides</p></div>
+    <div class="abs vrow" style="top:610px"><div class="stamp a pop" style="color:var(--bad);--r:-1.5deg;--d:8.6s">REJECT</div><p class="a rise" style="--d:8.8s">the data cannot answer the question</p></div>
+
+    <div class="abs card receipt a rise" style="--d:10.4s"><b>Receipt</b><span>the 8 attempts</span><span>&middot;</span><span>the groups</span><span>&middot;</span><span>every check that ran</span><span>&middot;</span><span>a check that did not run is shown as off</span></div>
+  </section>
+
+  <!-- 5. Our own model -->
+  <section class="scene">
+    <div class="kicker"><b>05</b>Our own model</div>
+    <div class="title a rise">Fine-tuned with LoRA: a small trained add-on, the model stays frozen.</div>
+
+    <div class="abs card frozen a rise" style="--d:.6s"><strong>Qwen2.5-Coder 1.5B</strong><span>frozen, not changed</span></div>
+    <div class="abs card lora a slide" style="--d:2.2s"><strong>LoRA</strong><span>trained add-on</span></div>
+    <div class="abs muted a fade" style="left:96px;top:770px;width:800px;font-size:24px;line-height:1.4;--d:3s">Trained on BIRD train questions with their correct SQL.</div>
+
+    <div class="abs axis a fade" style="--d:4s"></div>
+    <div class="abs barv a grow" style="left:1140px;top:623px;height:197px;background:var(--muted);--d:4.4s"></div>
+    <div class="abs barv a grow" style="left:1480px;top:472px;height:348px;background:var(--accent);--d:5.6s"></div>
+    <div class="abs barnum a fade" style="left:1100px;top:528px;--d:4.6s"><span data-count data-to="24.6" data-dec="1" data-delay="4600">0</span>%</div>
+    <div class="abs barnum a fade" style="left:1440px;top:376px;color:var(--accent);--d:5.8s"><span data-count data-from="24.6" data-to="43.5" data-dec="1" data-delay="5800">0</span>%</div>
+    <div class="abs barlab a fade" style="left:1100px;top:838px;--d:4.6s">Base model</div>
+    <div class="abs barlab a fade" style="left:1440px;top:838px;--d:5.8s">After fine-tuning</div>
+    <div class="abs muted a rise" style="left:1080px;top:906px;width:720px;text-align:center;font-size:24px;--d:7.4s">BIRD benchmark &middot; 1,534 unseen questions &middot; correct answers</div>
+  </section>
+
+  <!-- 6. Reinforcement learning -->
+  <section class="scene">
+    <div class="kicker"><b>06</b>Reinforcement learning (GRPO)</div>
+    <div class="title a rise">A training loop written by hand. The reward comes from running the query.</div>
+
+    <svg class="wires" viewBox="0 0 1920 1080">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" style="fill:#6C9DF2;stroke:none;opacity:1"/></marker></defs>
+      <path class="draw" pathLength="1" marker-end="url(#ah)" style="--d:1.8s" d="M576 355 H714"/>
+      <path class="draw" pathLength="1" marker-end="url(#ah)" style="--d:4s" d="M1200 355 H1338"/>
+      <path class="draw" pathLength="1" marker-end="url(#ah)" style="--d:7.4s" d="M1584 420 V625 H1206"/>
+      <path class="draw" pathLength="1" marker-end="url(#ah)" style="--d:10.4s" d="M720 625 H336 V426"/>
+    </svg>
+
+    <div class="abs card node a rise" style="left:96px;top:290px;--d:.6s"><strong>Model writes 8 queries</strong><span>for one question</span></div>
+    <div class="abs card node a rise" style="left:720px;top:290px;--d:2.4s"><strong>Database runs each one</strong><span>and compares with the correct result</span></div>
+    <div class="abs card node hot a rise" style="left:1344px;top:290px;--d:4.6s"><strong>Reward</strong><span class="mono" style="color:var(--accent)">1.0 right &middot; 0.1 ran &middot; 0 failed</span></div>
+    <div class="abs card node a rise" style="left:720px;top:560px;--d:8s"><strong>Update the model</strong><span>reinforce answers above the group average</span></div>
+
+    <div class="abs card find a rise" style="--d:12s">
+      <div class="lab">Small test run<br>0.5B model, 61 check questions</div>
+      <div class="pair"><small>Ran, wrong result</small><strong style="color:var(--warn)">12 &rarr; 29</strong></div>
+      <div class="pair"><small>Correct</small><strong>3 &rarr; 5</strong></div>
+      <div class="say">The model learned to collect the 0.1. We test for that.</div>
+    </div>
+  </section>
+
+  <!-- 7. What runs today -->
+  <section class="scene">
+    <div class="kicker"><b>07</b>What runs today</div>
+    <div class="title a rise">A 1.6 GB model file on a laptop. No internet.</div>
+
+    <div class="abs lap-screen a rise" style="--d:.5s"></div>
+    <div class="abs lap-base a rise" style="--d:.5s"></div>
+    <div class="abs wifi a fade" style="--d:3.2s">
+      <svg width="34" height="34" viewBox="0 0 34 34"><path d="M5 14 Q17 3 29 14 M10 20 Q17 13 24 20" fill="none" stroke="#8C95A6" stroke-width="3" stroke-linecap="round"/><circle cx="17" cy="26" r="2.6" fill="#8C95A6"/><path d="M5 30 L29 4" stroke="#F0564A" stroke-width="3.4" stroke-linecap="round"/></svg>
+      Wi-Fi off &middot; CPU only
+    </div>
+    <div class="abs card file a drop" style="--d:1.6s"><strong class="mono">verdict-qwen.gguf</strong><span>1.6 GB</span></div>
+
+    <div class="abs tests a rise" style="--d:5s"><div class="big"><span data-count data-to="321" data-dec="0" data-delay="5000">0</span></div><p>automated tests, all passing</p></div>
+    <div class="abs stack a rise" style="--d:6.6s"><span>FastAPI</span><span>React</span><span>SQLite sandbox</span><span>PyTorch</span><span>Ollama</span></div>
+    <div class="abs next a rise" style="--d:8.6s">Next: the real app &rarr;</div>
+  </section>
+
+  <div id="ready">
+    <strong>Verdict explainer</strong>
+    <div><kbd>Space</kbd> or <kbd>&rarr;</kbd> next scene &nbsp; <kbd>&larr;</kbd> back</div>
+    <div><kbd>P</kbd> practice mode &nbsp; <kbd>T</kbd> timed mode &nbsp; <kbd>F11</kbd> full screen</div>
+    <div>Start recording, then press Space.</div>
+  </div>
+  <div id="wipe"></div>
+</div>
+
+<div id="practice"><span class="clock" id="clock"></span><span id="line"></span></div>
+<div id="mode"></div>
+
+<script>
+(function () {
+  // Seconds per scene in timed mode. Change these to match your reading pace.
+  var DURATIONS = [11, 12, 13, 13, 11, 18, 12];
+
+  // The script, shown only in practice mode.
+  var LINES = [
+    'Companies make decisions on numbers from their data, and AI now writes the SQL behind them. On BIRD, the standard benchmark, even the best systems get about one question in five wrong.',
+    'And a wrong query does not fail. In our own test, the model searched for CANCELED in capitals. The data stores it in small letters. It answered zero. The real answer was 625.',
+    'Verdict asks the model eight times, with some randomness so the attempts differ. Each query runs in its own process: read-only, checked by the database itself, and killed if it runs too long.',
+    'We group attempts by their result, not their text, because different queries can be equally right. Six of eight agreeing is Trusted. A split, an empty answer or a zero goes to Review. If the data cannot answer, Reject.',
+    'The model is our own. We fine-tuned Qwen with LoRA, which trains a small add-on and leaves the model frozen. On 1,534 unseen questions it went from 24.6 to 43.5 percent.',
+    'Next is reinforcement learning, with a GRPO loop we wrote by hand. Each query runs on the real database: one point for a right result, a tenth for one that only runs. Answers that beat their group\'s average are reinforced. In a small run the model learned to chase that tenth, so we test for it.',
+    'The finished model is a 1.6 gigabyte file that runs on a laptop with no internet, backed by 321 automated tests. Here is the real app.'
+  ];
+
+  var stage = document.getElementById('stage');
+  var scenes = Array.prototype.slice.call(document.querySelectorAll('.scene'));
+  var ready = document.getElementById('ready');
+  var wipe = document.getElementById('wipe');
+  var practice = document.getElementById('practice');
+  var clock = document.getElementById('clock');
+  var line = document.getElementById('line');
+  var modeBox = document.getElementById('mode');
+
+  var index = -1;          // -1 ready screen, scenes.length = end
+  var timed = false, paused = false;
+  var timer = null, sceneStart = 0, counters = [];
+
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stage.style.transform = 'scale(' + s + ') translate(-50%, -50%)';
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  // One row of progress marks, copied into every scene.
+  var dotsHtml = scenes.map(function () { return '<i></i>'; }).join('');
+  scenes.forEach(function (sc, i) {
+    var d = sc.querySelector('#dots') || document.createElement('div');
+    d.id = ''; d.className = 'dots'; d.style.cssText = 'position:absolute;left:96px;bottom:44px;display:flex;gap:10px';
+    d.innerHTML = dotsHtml;
+    Array.prototype.forEach.call(d.children, function (el, j) {
+      el.style.cssText = 'width:44px;height:4px;border-radius:2px;background:' + (j <= i ? 'var(--accent)' : 'var(--line)');
+    });
+    sc.appendChild(d);
+  });
+
+  function stopCounters() { counters.forEach(clearTimeout); counters = []; }
+
+  function runCounters(sc) {
+    stopCounters();
+    Array.prototype.forEach.call(sc.querySelectorAll('[data-count]'), function (el) {
+      var from = parseFloat(el.getAttribute('data-from') || '0');
+      var to = parseFloat(el.getAttribute('data-to'));
+      var dec = parseInt(el.getAttribute('data-dec') || '0', 10);
+      var delay = parseInt(el.getAttribute('data-delay') || '0', 10);
+      el.textContent = from.toFixed(dec);
+      counters.push(setTimeout(function () {
+        var t0 = performance.now(), dur = 1100;
+        (function step(now) {
+          var p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+          el.textContent = (from + (to - from) * e).toFixed(dec);
+          if (p < 1 && sc.classList.contains('on')) requestAnimationFrame(step);
+          else el.textContent = to.toFixed(dec);
+        })(t0);
+      }, delay));
+    });
+  }
+
+  // Scene 2: mark the wrong literal and the real value after a pause.
+  function sceneExtras(i) {
+    var bad = document.getElementById('badlit'), hit = document.getElementById('hitrow');
+    bad.className = ''; hit.className = 'row';
+    if (i === 1) {
+      counters.push(setTimeout(function () { bad.className = 'hl-bad'; }, 4600));
+      counters.push(setTimeout(function () { hit.className = 'row hit'; }, 5400));
+    }
+  }
+
+  function show(i) {
+    clearTimeout(timer);
+    index = Math.max(-1, Math.min(scenes.length, i));
+    scenes.forEach(function (sc) { sc.classList.remove('on'); });
+    stopCounters();
+    wipe.classList.remove('go');
+    ready.classList.toggle('off', index !== -1);
+    document.body.classList.toggle('playing', index >= 0);
+
+    if (index >= 0 && index < scenes.length) {
+      var sc = scenes[index];
+      void sc.offsetWidth;                 // restart the animations
+      sc.classList.add('on');
+      runCounters(sc);
+      sceneExtras(index);
+      sceneStart = performance.now();
+      if (timed && !paused) timer = setTimeout(function () { show(index + 1); }, DURATIONS[index] * 1000);
+    } else if (index === scenes.length) {
+      void wipe.offsetWidth;
+      wipe.classList.add('go');
+    }
+    updatePractice();
+  }
+
+  function updatePractice() {
+    if (!practice.classList.contains('on')) return;
+    if (index >= 0 && index < scenes.length) {
+      var s = Math.floor((performance.now() - sceneStart) / 1000);
+      clock.textContent = 'Scene ' + (index + 1) + '/' + scenes.length + '  ' + s + 's / ' + DURATIONS[index] + 's';
+      line.textContent = LINES[index];
+    } else {
+      clock.textContent = index === -1 ? 'Ready' : 'End';
+      line.textContent = index === -1 ? 'Press Space to start.' : 'Switch to the app.';
+    }
+  }
+  setInterval(updatePractice, 250);
+
+  function showMode() {
+    modeBox.textContent = timed ? (paused ? 'timed, paused' : 'timed') : '';
+    modeBox.classList.toggle('on', timed && practice.classList.contains('on'));
+  }
+
+  document.addEventListener('keydown', function (e) {
+    var k = e.key;
+    if (k === ' ' || k === 'ArrowRight' || k === 'PageDown' || k === 'Enter') {
+      e.preventDefault();
+      if (timed && k === ' ' && index >= 0 && index < scenes.length) {
+        paused = !paused;
+        clearTimeout(timer);
+        if (!paused) timer = setTimeout(function () { show(index + 1); }, 1500);
+        showMode();
+      } else {
+        show(index + 1);
+      }
+    } else if (k === 'ArrowLeft' || k === 'PageUp') {
+      e.preventDefault(); show(index - 1);
+    } else if (k === 'Home') {
+      show(-1);
+    } else if (k === 'p' || k === 'P') {
+      practice.classList.toggle('on'); updatePractice(); showMode();
+    } else if (k === 't' || k === 'T') {
+      timed = !timed; paused = false; showMode();
+      if (index >= 0 && index < scenes.length) show(index);
+    }
+  });
+  document.addEventListener('click', function () { show(index + 1); });
+
+  var h = parseInt(location.hash.slice(1), 10); show(h >= 1 && h <= scenes.length ? h - 1 : -1);
+})();
+</script>
+</body>
+</html>

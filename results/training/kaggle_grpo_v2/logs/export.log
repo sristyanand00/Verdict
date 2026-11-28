@@ -1,0 +1,10 @@
+
+=== start 2026-11-27 15:18:21: /usr/bin/python3 scripts/export_model.py --adapter /kaggle/working/grpo_v2/best --out /tmp/export
+Merging /kaggle/working/grpo_v2/best into its base model on the CPU
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:  70%|██████▉   | 235/338 [00:00<00:00, 2345.91it/s]Loading weights: 100%|██████████| 338/338 [00:00<00:00, 2406.33it/s]
+Writing model shards:   0%|          | 0/1 [00:00<?, ?it/s]Writing model shards: 100%|██████████| 1/1 [00:01<00:00,  1.41s/it]Writing model shards: 100%|██████████| 1/1 [00:01<00:00,  1.41s/it]
+Saved the merged model to /tmp/export/merged
+Saved /tmp/export/Modelfile
+Next: convert to GGUF with llama.cpp (see the top of this script).
+
+=== end 2026-11-27 15:18:55: exit code 0, 0.6 minutes

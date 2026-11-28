@@ -105,18 +105,100 @@ The college computer is not needed on demo day. It is only needed before that, f
    - If the laptop is too slow: the GPU PC over a cable or local network (set `VERDICT_QWEN_URL`).
    - If anything else fails: the recorded video.
 
-## 3. A shareable link (after the demo, if there is time)
+## 3. Public link on a cloud server (done 26 Nov, tested)
 
-- **Frontend** on Vercel (free). Set `VITE_USE_MOCK=false` and point `/api` at the backend address.
-- **Backend and vLLM** on the college GPU PC.
-  - A Cloudflare Tunnel gives it a public address without opening ports on the college network.
-  - Set `VERDICT_CORS_ORIGINS` to the Vercel address.
-- **Must add before sharing**, because strangers will use it:
-  - a limit on questions per visitor per minute
-  - a time limit on every request
-  - uploads turned off, or deleted after a day
-  - no error details shown to users
-- **Weak point**: the link only works while that PC is on. Say so wherever the link is shared.
+Live at `https://139-84-142-13.sslip.io`. One server runs everything: Caddy (HTTPS) in front of the
+backend, which also serves the website; Ollama with the trained and the base Qwen; the databases.
+No GPU: an ask with 8 attempts took 13 to 25 seconds.
+
+**Server**: Vultr Cloud Compute, Shared CPU, plan `vhp-4c-8gb` (4 vCPU, 8 GB RAM, 180 GB NVMe,
+$48 a month), Bangalore, Ubuntu 24.04 LTS, login by SSH key only. Automatic backups off.
+A stopped server is still billed; only destroying it stops the bill.
+
+Steps, as run (as root over SSH):
+
+1. Packages and code:
+   ```
+   apt-get update && apt-get install -y git python3-venv python3-pip sqlite3 unzip
+   git clone https://github.com/sristyanand00/Verdict.git /opt/verdict
+   cd /opt/verdict && python3 -m venv .venv && .venv/bin/pip install -e ".[app]"
+   ```
+2. Ollama and the models:
+   ```
+   curl -fsSL https://ollama.com/install.sh | sh
+   systemctl enable --now ollama
+   ollama pull qwen2.5-coder:1.5b                       # the base model, for the Arena
+   ollama create verdict-qwen -f /opt/verdict/deploy/Modelfile
+   ```
+   The trained GGUF (1.6 GB) is not online, so it is copied from the laptop. A home upload line
+   dropped a single 1.6 GB `scp` more than once, so it was split into 100 MB parts
+   (`split -b 100M`), each part copied with retries, joined with `cat`, and checked with
+   `sha256sum`: Ollama's blob file name is the file's SHA-256, so the two must match.
+   `deploy/Modelfile` is the laptop's (`ollama show verdict-qwen --modelfile`) with `FROM` changed
+   to `/opt/model/verdict-qwen.gguf`.
+3. Databases: Olist (`datasets/olist/olist.sqlite`) is copied from the laptop. The BIRD dev
+   databases are downloaded on the server (much faster than uploading):
+   `curl -LO https://bird-bench.oss-cn-beijing.aliyuncs.com/dev.zip`, unzip it, unzip the
+   `dev_databases.zip` inside, and copy each `<id>.sqlite` to `datasets/dev_databases/<id>/`.
+   Check each copy: `sqlite3 <file> "pragma integrity_check"`. An upload cut off half way gives a
+   short file that still opens.
+4. Website: build it on the laptop (`cd frontend && npm run build`) and copy `frontend/dist` to
+   `/opt/verdict/frontend/dist`. The server has no Node.
+5. `/opt/verdict/.env` (`chmod 600`), never in git:
+   ```
+   VERDICT_ADMIN_EMAIL=...
+   VERDICT_ADMIN_PASSWORD=...
+   GEMINI_API_KEY=...          GEMINI_MODEL=...
+   GROQ_API_KEY=...
+   VERDICT_UPLOADS=off
+   VERDICT_TRUST_PROXY=1
+   VERDICT_CORS_ORIGINS=https://139-84-142-13.sslip.io
+   VERDICT_MAX_CONCURRENT_ASKS=2
+   VERDICT_QUEUE_WAIT_S=150      # from the load test: wait in a rush instead of failing
+   ```
+6. The app as a service, `/etc/systemd/system/verdict.service`, then
+   `systemctl daemon-reload && systemctl enable --now verdict`:
+   ```
+   [Unit]
+   Description=Verdict API and website
+   After=network-online.target ollama.service
+   Wants=ollama.service
+
+   [Service]
+   WorkingDirectory=/opt/verdict
+   ExecStart=/opt/verdict/.venv/bin/uvicorn verdict.api.main:app --host 127.0.0.1 --port 8000
+   Restart=always
+   RestartSec=3
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+   Bound to 127.0.0.1, so only Caddy can reach it.
+7. HTTPS with Caddy (install from Caddy's apt repository). `sslip.io` turns the IP into a name, so
+   no domain is needed. `/etc/caddy/Caddyfile`, then `systemctl restart caddy`; Caddy gets the
+   Let's Encrypt certificate by itself and renews it:
+   ```
+   139-84-142-13.sslip.io {
+       encode gzip
+       reverse_proxy 127.0.0.1:8000 {
+           header_up -CF-Connecting-IP
+           transport http {
+               response_header_timeout 300s
+           }
+       }
+   }
+   ```
+   Caddy sends each visitor's address in `X-Forwarded-For`, which `VERDICT_TRUST_PROXY=1` reads for
+   the login limit. The `CF-Connecting-IP` header is removed so a visitor cannot fake it.
+8. Firewall: `ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw --force enable`.
+9. Check: `curl -s http://127.0.0.1:8000/api/health` on the server, then the public link, then log
+   in and ask one question.
+10. Demo cache: `scripts/warm_cache.py --db <id> <questions.txt>` on the server for each database.
+
+**Updating**: `cd /opt/verdict && git pull && systemctl restart verdict`. If the website changed,
+build it on the laptop and copy `frontend/dist` again. After changing which model an id points to,
+empty the answer cache (`DELETE /api/admin/cache` as the provider): cached answers are keyed by the
+model id, not by the file behind it.
 
 ## Who provides what
 

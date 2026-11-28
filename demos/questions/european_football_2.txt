@@ -1,0 +1,9 @@
+# Demo questions for european_football_2. One per line. Expected answers: demos/questions/EXPECTED.md
+How many players are there?
+How many leagues are there?
+How many matches did the home team win?
+Who is the tallest player?
+How many matches were played in the England Premier League in the 2015/2016 season?
+Which player has the highest overall rating?
+How many players are left-footed?
+What is the salary of Lionel Messi?

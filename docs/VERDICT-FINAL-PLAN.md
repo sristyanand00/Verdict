@@ -2,7 +2,9 @@
 
 The AI analyst that knows when not to answer.
 
-Version 1.0, written 18 Nov 2026. Build window: 19 Nov to 8 Dec 2026 (20 days). Buffer: 9 Dec to demo day (about 18 Dec).
+Version 1.1, updated 19 Nov 2026 (first written 18 Nov). Build window: 19 Nov to 8 Dec 2026 (20 days). Buffer: 9 Dec to demo day (about 18 Dec).
+
+What changed in 1.1: the analyst is the only user; three levels (Trusted, Review, Reject); new analyst workspace features (Data Explorer, answer lineage, Metrics page, history, saved queries, export, event log); one priority list for everything (section 19).
 
 This one file holds everything decided so far: what Verdict is, what already exists in the code, every feature and flow, every screen, the backend, the API, how the parts connect, how we prove it works, the 20-day plan, and the demo day script.
 
@@ -28,6 +30,7 @@ This one file holds everything decided so far: what Verdict is, what already exi
 16. [Risks and backups](#16-risks-and-backups)
 17. [What we are not building](#17-what-we-are-not-building)
 18. [Build guide: how to work through this](#18-build-guide-how-to-work-through-this)
+19. [Priority list](#19-priority-list)
 
 ---
 
@@ -41,14 +44,15 @@ A second problem: many companies (banks, hospitals, a lot of Indian firms) are n
 
 ### What Verdict does
 
-A manager asks a question in plain English. Verdict writes the SQL several times, runs it safely, checks the answers, and decides:
+An analyst asks a question in plain English. Verdict writes the SQL 8 times, runs it safely, checks the answers, and decides one of three levels:
 
-- **Green**: trusted. The manager gets the answer directly, with a receipt showing why.
-- **Did you mean?**: the question has two meanings. Verdict asks which one.
-- **Can't answer**: the data does not contain this. Verdict says what is missing.
-- **Yellow / Red**: not sure, or probably wrong. It goes to the analyst's inbox with a draft.
+- **Trusted**: the answer is shown, with a receipt showing why and where the number came from.
+- **Review**: not sure. Reasons include low agreement, an empty answer, a clash with an approved answer, or two meanings ("did you mean A or B?"). It goes to the review queue with a draft.
+- **Reject**: probably wrong, nothing ran, or the data does not contain this ("not in the data").
 
-The analyst only handles the exceptions. Every approval teaches Verdict, so more questions turn green over time.
+The analyst only has to check the Review items. Every approval teaches Verdict, so more questions become Trusted over time.
+
+Around this sits a small analyst workspace: explore the data, see past and saved questions, read metric definitions, and export an answer together with its receipt.
 
 Verdict can run fully private with our own trained Qwen model, on the company's own machine, with no internet.
 
@@ -143,10 +147,12 @@ Items from the earlier option list and where they ended up:
 
 About 134 test functions across 24 test files, run in CI (`.github/workflows/ci.yml`).
 
-### Frontend and API
+### Frontend and API (updated 19 Nov)
 
-- `verdict/api/main.py`: one line. **Empty.**
-- `frontend/src/screens/*.tsx`: comments only (Landing, Console, TrustDial, Audit, Hacking, Dashboard, History). **Empty.** No `package.json` yet.
+- API server built (`verdict/api/`): every endpoint in [docs/API.md](API.md). Routes: ask, review, knowledge, data, models, results.
+- New engine parts built: `ambiguity.py`, `knowledge.py`, `checks.py`, `final_verdict` in `trust.py`, `OpenAICompatWriter` in `llm.py`. App database in `verdict/store/db.py`.
+- Frontend set up (React + Vite + TypeScript + Tailwind). Built: intro page, Ask page, Trust Receipt (lineage, checks, export CSV / SQL / receipt, save, event log), Review queue and Review detail (edit and run SQL, approve / fix / reject, save meaning, save known number), History, Saved, Model Arena. Types follow docs/API.md. Uses mock data until the backend is connected.
+- Still waiting on: the Olist file, a Qwen server address, measured thresholds and `results.json`.
 
 ### Current numbers (honest)
 
@@ -258,6 +264,16 @@ Features: database switcher, upload, schema view, model switch, schema selection
 4. The verifier stamps each one correct or wrong. Verdict shows its color.
 5. Below: the scoreboard from the full evaluation.
 
+### Flow 7: The analyst workspace (added 19 Nov)
+
+1. **Explore**: before asking, the analyst opens the **Data Explorer**, picks a table and clicks a column to see its type, empty share, distinct values, and min / max / average.
+2. **Ask**: as in Flow 2. The receipt now has **answer lineage**: the number, then the formula, the tables and columns, the filters and the date range, all read from the SQL that produced it.
+3. **Check the definition**: if a saved metric (for example "revenue") was used, the receipt shows it and links to the **Metrics** page.
+4. **Find it again**: every question is in **History**, grouped by day, each with its level. Clicking one opens the full receipt.
+5. **Keep it**: the analyst can **save** an answer (name, SQL, result, level, metrics used, last checked). Saved items can be re-run, and Verdict says whether the number changed.
+6. **Send it**: **Export** as CSV, as SQL, or as a short receipt (answer, level, source tables, definition, period, "checked by Verdict"). Copy to clipboard too.
+7. **What happened**: each question has an **event log**: SQL written, 8 attempts run, checks done, level decided, approved or fixed, meaning saved. No user names (there is no login).
+
 ---
 
 ## 5. Features outside the flows
@@ -283,23 +299,42 @@ Features: database switcher, upload, schema view, model switch, schema selection
 - Safety test: hostile queries all blocked, database file hash unchanged after a run.
 - Every ask saved as a record (doubles as an audit trail).
 
-### Stretch (only if ahead of schedule)
+### Analyst workspace (added 19 Nov)
 
-- Shuffled-reward control run (C3).
-- Hand audit of 100 to 200 BIRD gold queries (C7).
-- Schema selection for big databases (AdventureWorks).
+Details in Flow 7 and the screens below.
+
+- **Data Explorer with column stats**: computed with plain SQL on the read-only connection (count, nulls, distinct, min, max, average). Cached per database.
+- **Answer lineage**: parse the chosen SQL (sqlglot) into: result columns and formula, source tables and columns, filters (WHERE), date range, grouping. Read only from the SQL, never guessed. If parsing fails, show the SQL only.
+- **Metrics page**: the existing "meanings", shown as metrics: name, definition, formula, source tables, last checked. "Not the same as" notes are optional.
+- **History**: built on the saved asks (`GET /api/asks`), grouped by day.
+- **Saved queries**: name an answer, re-run it later, show whether the number changed.
+- **Export**: CSV, SQL, and a short text receipt.
+- **Query time and rows**: time taken and rows returned, shown on the receipt. No cost estimates (SQLite has none).
+- **Event log**: what Verdict and the analyst did on each question, with times.
 
 ---
 
 ## 6. Screens: structure of every page
 
-You do the visual design. This section fixes what each screen must contain and what data it gets. Design rule for colors: never rely on color alone. Every badge also has a text label (Green / Yellow / Red / Can't answer / Did you mean?).
+You do the visual design. This section fixes what each screen must contain and what data it gets. Design rule for colors: never rely on color alone. Every badge also has a text label (Trusted / Review / Reject).
+
+Note (19 Nov): the sketches below were drawn before the switch to three levels and an analyst-only product. Read them like this: Green = Trusted; Yellow and Red = Review or Reject; "Did you mean?" = Review with reason "two meanings"; "Can't answer" = Reject with reason "not in the data"; Inbox = Review queue; "manager" = analyst. No per-answer confidence percentage anywhere; only the tested rate with its range.
 
 ### Global layout
 
+Pages are grouped into five sections:
+
+| Section | Pages |
+|---|---|
+| Analyze | Ask, History, Saved, Data Explorer |
+| Trust | Receipt (with lineage), Metrics |
+| Review | Review queue, Review detail |
+| Learn | Knowledge (examples, known numbers) |
+| Proof | Trust Report, Model Arena |
+
 ```
 +------------------------------------------------------------------+
-| VERDICT   [Ask] [Inbox (7)] [Knowledge] [Data] [Trust] [Arena]   |
+| VERDICT  Analyze v  Trust v  Review (7)  Learn  Proof v          |
 |                         DB: Olist v    Model: Private (Qwen) v   |
 +------------------------------------------------------------------+
 |                                                                  |
@@ -308,8 +343,8 @@ You do the visual design. This section fixes what each screen must contain and w
 +------------------------------------------------------------------+
 ```
 
-- Top bar: logo, page links, inbox count, current database, current model.
-- A "role" toggle (Manager / Analyst) is optional. For the demo, simply hide Inbox and Knowledge in Manager view.
+- Top bar: logo, sections, review count, current database, current model.
+- No role toggle: the analyst is the only user.
 
 ### Screen 1: Ask (manager)
 
@@ -368,13 +403,24 @@ Data needed: `POST /api/ask` response.
 |  [pass] No conflict with approved answers                        |
 |  [ -- ] Second model: off                                        |
 +------------------------------------------------------------------+
-|  Used knowledge: "sales = payment_value, delivered orders only"  |
-|  Model: Qwen 1.5B (trained), private.  Time: 3.2 s               |
-|  Tested trust: green right 91% (88-94%) on 1,534 BIRD questions  |
+|  Where this number came from (answer lineage)                    |
+|  R$ 1,284,330                                                    |
+|    = SUM(payments.payment_value)                                 |
+|    from orders JOIN payments JOIN customers                      |
+|    where order_status = 'delivered'                              |
+|      and customer_city = 'sao paulo'                             |
+|    period: 2018-08-01 to 2018-08-31                              |
++------------------------------------------------------------------+
+|  Metric used: Sales (definition, link to Metrics page)           |
+|  Model: Qwen 1.5B (trained), private.  Time: 3.2 s, 1 row        |
+|  Tested trust: Trusted right 91% (88-94%) on 1,534 BIRD questions|
++------------------------------------------------------------------+
+|  [Copy] [Download CSV] [Export SQL] [Export receipt] [Save]      |
+|  Event log (collapsed): written, ran 8, checked, Trusted, 10:30  |
 +------------------------------------------------------------------+
 ```
 
-Data needed: `GET /api/asks/{id}`.
+Data needed: `GET /api/asks/{id}` (with `lineage`, `elapsed_ms`, `row_count`), `GET /api/asks/{id}/events`.
 
 ### Screen 3: Did you mean?
 
@@ -446,15 +492,31 @@ Data needed: `GET /api/inbox`.
 
 Data needed: `GET /api/inbox/{id}`, `POST /api/sql/run`, `POST /api/inbox/{id}/resolve`.
 
-### Screen 7: Knowledge
+### Screen 7a: Metrics (the meanings, shown as a product page)
+
+```
++------------------------------------------------------------------+
+|  METRICS                                            DB: Olist    |
++------------------------------------------------------------------+
+|  Revenue                                                         |
+|  Definition:  sum of price for delivered orders                  |
+|  Formula:     SUM(order_items.price)                             |
+|  Source:      order_items, orders                                |
+|  Not the same as: price plus freight                             |
+|  Last checked: today              Used in 12 answers [edit][del] |
++------------------------------------------------------------------+
+|  Late order                                                      |
+|  Definition:  delivered after the estimated date      ...        |
++------------------------------------------------------------------+
+```
+
+Data needed: `GET /api/knowledge` (meanings), plus `formula`, `source_tables`, `not_same_as`, `used_count` on each meaning.
+
+### Screen 7b: Knowledge (examples and known numbers)
 
 ```
 +------------------------------------------------------------------+
 |  KNOWLEDGE (what the analyst has taught Verdict)    DB: Olist    |
-+------------------------------------------------------------------+
-|  Meanings                                                        |
-|  revenue   = SUM(payment_value), delivered orders    [edit][del] |
-|  late      = delivered after estimated date          [edit][del] |
 +------------------------------------------------------------------+
 |  Approved examples                                               |
 |  "Revenue from Rio last quarter?"  -> SQL, 812,400   approved by |
@@ -495,7 +557,7 @@ Data needed: `GET/POST/DELETE /api/knowledge/...`.
 
 All numbers come from `results.json` (precomputed). Placeholder numbers in this sketch are examples only.
 
-### Screen 9: Data
+### Screen 9: Data Explorer
 
 ```
 +------------------------------------------------------------------+
@@ -503,15 +565,55 @@ All numbers come from `results.json` (precomputed). Placeholder numbers in this 
 |  Current: Olist e-commerce (9 tables, 99,441 orders)             |
 |  Switch: [Olist] [BIRD financial] [BIRD debit card] [Upload...]  |
 +------------------------------------------------------------------+
-|  Tables                      | Columns of selected table         |
-|  orders          99,441 rows | order_id        TEXT              |
-|  order_items    112,650 rows | customer_id     TEXT              |
-|  ...                         | order_status    TEXT              |
+|  Tables              | Columns of orders    | Column: price      |
+|  orders       99,441 | order_id      TEXT   | Type:    REAL      |
+|  order_items 112,650 | customer_id   TEXT   | Empty:   0.3%      |
+|  products     32,951 | order_status  TEXT   | Distinct: 31,240   |
+|  payments    103,886 | price         REAL > | Min: 0.85          |
+|  ...                 | ...                  | Max: 6,735         |
+|                      |                      | Average: 120.65    |
+|                      |                      | Sample values: ... |
 +------------------------------------------------------------------+
 |  Model:  ( ) Cloud - Gemini     (o) Private - Qwen (offline)     |
 |  Status: Qwen running locally, 1.5B, last answer 3.2 s           |
 +------------------------------------------------------------------+
 ```
+
+- Text columns show the most common values instead of min / max / average.
+- Sample values are shown only on this page (they never go to a cloud model).
+
+Data needed: `GET /api/databases/{id}/schema`, `GET /api/databases/{id}/tables/{table}/columns/{column}/stats`.
+
+### Screen 9b: History
+
+```
++------------------------------------------------------------------+
+|  HISTORY                         Filter: [All levels v] [Olist v]|
++------------------------------------------------------------------+
+|  Today                                                           |
+|  [TRUSTED] Sales in Sao Paulo last month          R$ 1,284,330   |
+|  [REVIEW]  Revenue in 2017 (two meanings)                        |
+|  [REJECT]  Advertising ROI (not in the data)                     |
+|  Yesterday                                                       |
+|  [TRUSTED] Monthly orders 2018                                   |
++------------------------------------------------------------------+
+```
+
+Click one to open its receipt. Data needed: `GET /api/asks`.
+
+### Screen 9c: Saved
+
+```
++------------------------------------------------------------------+
+|  SAVED                                                           |
++------------------------------------------------------------------+
+|  Monthly revenue      [TRUSTED]  R$ 1,284,330   checked today    |
+|                       [Re-run]   [Open receipt]  [Delete]        |
+|  Late orders by state [TRUSTED]  ...            checked 2 d ago  |
++------------------------------------------------------------------+
+```
+
+Re-run goes through the same verifier and says if the number changed. Data needed: `GET/POST/DELETE /api/saved`, `POST /api/saved/{id}/rerun`.
 
 ### Screen 10: Model Arena (demo page)
 
@@ -546,17 +648,9 @@ All numbers come from `results.json` (precomputed). Placeholder numbers in this 
 - Race answers come from cache (`results.json` / demo cache), so it never fails on stage.
 - Honesty rules: same questions, same prompt, same scoring for all; show ranges; no "win" claimed for gaps under 3 to 5 points.
 
-### Mapping old frontend stubs to new screens
+### Frontend screens today
 
-| Old stub | New screen |
-|---|---|
-| `Landing.tsx` | Optional intro / start of the demo (can reuse the 3 preset questions idea) |
-| `Console.tsx` | Ask + Receipt |
-| `TrustDial.tsx` | The slider inside Trust Dashboard |
-| `Dashboard.tsx` | Model Arena |
-| `History.tsx` | Analyst Inbox + Knowledge |
-| `Audit.tsx` | A section of Trust Dashboard (only if the hand audit happens) |
-| `Hacking.tsx` | Dropped |
+Built (19 Nov): `Landing.tsx` (intro), `Ask.tsx`, `Receipt.tsx`, `Review.tsx`, `ReviewDetail.tsx`, `History.tsx`, `Saved.tsx`, `Arena.tsx` (3 robots: a cloud model you pick, Qwen base, our trained model). Still to build: Data Explorer, Metrics, Knowledge, Trust Report.
 
 ---
 
@@ -582,6 +676,7 @@ verdict/
       models.py             NEW  /api/models, /api/settings
       sql.py                NEW  /api/sql/run
       results.py            NEW  /api/results (serves results.json)
+      saved.py              NEW  /api/saved (added 19 Nov)
     schemas/                NEW  Pydantic request/response models
   engine/
     ask.py                  exists, extended: prompt gets knowledge, returns checks
@@ -591,6 +686,8 @@ verdict/
     ambiguity.py            NEW  detects two big groups, labels each meaning
     knowledge.py            NEW  meanings, approved examples, known numbers, retrieval
     checks.py               NEW  builds the receipt's check list
+    lineage.py              NEW  reads the SQL into formula, tables, filters, period (added 19 Nov)
+    profile.py              NEW  column stats for the Data Explorer (added 19 Nov)
   store/
     db.py                   NEW  app.db tables and queries
   eval/
@@ -611,18 +708,23 @@ verdict/
 | `examples` | id, database_id, question, sql, rows (json), from_inbox_id, created_at |
 | `known_numbers` | id, database_id, name, question, sql, value (json), last_checked_at, last_ok |
 | `settings` | key, value (current db, current model, second model on/off) |
+| `saved` (added 19 Nov) | id, ask_id, name, sql, rows (json), level, last_run_at, last_value (json), changed |
+| `events` (added 19 Nov) | id, ask_id, actor (verdict / analyst), action, detail (json), created_at |
+| `column_stats` (added 19 Nov) | database_id, table, column, stats (json), computed_at |
+
+Meanings get extra optional columns for the Metrics page: `formula`, `source_tables`, `not_same_as`.
 
 ### Decision rules (final version)
 
-Checked in this order:
+Updated 19 Nov 2026 to three levels. Checked in this order (code: `verdict/engine/trust.py`, `final_verdict`):
 
-1. **Can't answer**: more than half the attempts said `CANNOT_ANSWER`.
-2. **Did you mean?**: the two largest groups each have at least 3 of 8 attempts, and their answers differ.
-3. **Red**: agreement below the yellow threshold, or most attempts failed to run.
-4. **Yellow**: any of: agreement between yellow and green threshold; empty answer; conflict with an approved answer; second model disagrees (if on).
-5. **Green**: agreement at or above the green threshold and no yellow condition.
+1. **Reject, not in the data**: more than half the attempts said `CANNOT_ANSWER`.
+2. **Review, two meanings**: the two largest groups each have at least 3 of 8 attempts, and their answers differ.
+3. **Reject**: no attempt produced a working query, most attempts failed to run, or agreement is below the yellow threshold.
+4. **Review**: any of: agreement between yellow and green threshold; empty answer; conflict with an approved answer; second model disagrees (if on).
+5. **Trusted**: agreement at or above the green threshold and no review condition.
 
-Thresholds come from `thresholds.json`, fitted on day 5 from real data (calibration split), and reported on the test split.
+Thresholds come from `thresholds.json`, fitted on day 5 from real data (calibration split), and reported on the test split. The agreement-only levels (green / yellow / red / unanswerable) stay in `trust.py` for calibration.
 
 ### Model writers
 
@@ -648,78 +750,23 @@ Similarity: TF-IDF over approved questions (no extra model needed, works offline
 
 ## 8. API contract
 
-All responses are JSON. Base path `/api`.
+The full contract now lives in [docs/API.md](API.md). Only the Backend chat changes it. Short version, updated 19 Nov 2026 for the trust-layer framing (analyst is the only user, three levels):
 
-### `POST /api/ask`
+- Levels are `trusted`, `review`, `reject`. "Two meanings" and "not in the data" are reasons (`two_meanings`, `not_in_data`), not levels.
+- `POST /api/ask` returns the level, a list of `reasons` (`{code, text}`), the answer and SQL, the attempt groups, every attempt, the 7 checks (`pass` / `fail` / `off`), `options` for two meanings, `knowledge_used` and `tested_trust`.
+- The inbox is now the review queue: `GET /api/review`, `GET /api/review/{id}`, `POST /api/review/{id}/resolve` (approve, fix, reject).
+- New: `POST /api/asks/{id}/flag` (analyst marks a Trusted answer as wrong). `POST /api/asks/{id}/choose` now approves one reading of a two-meaning question.
+- Unchanged in spirit: `/api/sql/run`, `/api/knowledge...`, `/api/databases...`, `/api/models`, `/api/settings`, `/api/results`, `/api/arena/{key}`, `/api/health`.
 
-Request:
+Proposed additions for the analyst workspace (19 Nov). The Backend chat adds them to [docs/API.md](API.md):
 
-```json
-{ "question": "What were sales in Sao Paulo last month?", "database_id": "olist", "model": "qwen-grpo" }
-```
-
-Response:
-
-```json
-{
-  "ask_id": "a_102",
-  "level": "green",
-  "answer_text": "1,284,330.12",
-  "columns": ["total_sales"],
-  "rows": [[1284330.12]],
-  "sql": "SELECT SUM(...) ...",
-  "reason": "7 of 8 attempts agree",
-  "groups": [
-    { "size": 7, "sql": "SELECT ...", "preview": [[1284330.12]] },
-    { "size": 1, "sql": "SELECT ...", "preview": [[1301882.0]] }
-  ],
-  "n_attempts": 8, "n_cannot_answer": 0, "n_failed": 0,
-  "checks": [
-    { "name": "safe", "status": "pass", "detail": "read-only, nothing blocked" },
-    { "name": "agreement", "status": "pass", "detail": "7 of 8" },
-    { "name": "second_model", "status": "off", "detail": "" }
-  ],
-  "options": null,
-  "knowledge_used": ["revenue = SUM(payment_value), delivered only"],
-  "tested_trust": { "precision": 0.91, "low": 0.88, "high": 0.94, "on": "BIRD dev, 1,534" },
-  "model": "qwen-grpo", "latency_ms": 3200
-}
-```
-
-When `level` is `"did_you_mean"`, `options` is a list:
-
-```json
-[ { "label": "Product price only", "sql": "...", "rows": [[6155806]], "size": 4 },
-  { "label": "Price plus freight", "sql": "...", "rows": [[7142672]], "size": 4 } ]
-```
-
-When `level` is `"cannot_answer"`, `reason` says what seems missing.
-
-### Other endpoints
-
-| Method and path | What it does |
-|---|---|
-| `GET /api/asks?limit=20` | Recent questions with level |
-| `GET /api/asks/{id}` | Full record for the receipt |
-| `POST /api/asks/{id}/choose` | Manager picks option A or B (`{"option": 0}`) |
-| `GET /api/inbox?status=open&level=red` | Inbox list |
-| `GET /api/inbox/{id}` | One item with groups and draft SQL |
-| `POST /api/inbox/{id}/resolve` | `{"action": "approve", "sql": "...", "note": "...", "save_meaning": {...}, "save_known_number": true}` (action is approve, fix or reject) |
-| `POST /api/sql/run` | `{"database_id": "...", "sql": "..."}` runs through the verifier, returns rows or status |
-| `GET /api/knowledge?database_id=olist` | Meanings, examples, known numbers |
-| `POST /api/knowledge/meanings` | Add a meaning |
-| `DELETE /api/knowledge/{kind}/{id}` | Remove an item |
-| `POST /api/knowledge/known/{id}/recheck` | Run a known number again, report if it changed |
-| `GET /api/databases` | Preloaded and uploaded databases |
-| `POST /api/databases/upload` | Multipart file upload (CSV, XLSX, SQLite) |
-| `GET /api/databases/{id}/schema` | Tables, columns, row counts |
-| `GET /api/models` | Available models and whether each is reachable |
-| `PUT /api/settings` | Current database, model, second-model on/off |
-| `GET /api/results` | `results.json` for Trust Dashboard and Model Arena |
-| `GET /api/arena/{question_key}` | Cached 4-model answers for one scripted question |
-| `GET /api/health` | Server, models and database status |
-
----
+- `POST /api/ask` and `GET /api/asks/{id}`: add `lineage` (`{output, formula, tables, columns, filters, period, group_by}` or `null` if the SQL could not be read), `elapsed_ms` and `row_count`.
+- `GET /api/asks/{id}/events`: the event log for one question.
+- `GET /api/asks/{id}/export?format=csv|sql|receipt`: download the answer.
+- `GET /api/databases/{id}/tables/{table}/columns/{column}/stats`: `{type, count, nulls, distinct, min, max, avg, top_values}`.
+- `GET /api/saved`, `POST /api/saved` (`{ask_id, name}`), `DELETE /api/saved/{id}`, `POST /api/saved/{id}/rerun`.
+- Meanings accept optional `formula`, `source_tables`, `not_same_as`, and return `used_count`.
+- History uses the existing `GET /api/asks` (add `level` and `date` filters).
 
 ## 9. Connections: how everything talks
 
@@ -779,7 +826,7 @@ Note: vLLM runs on Linux. On Windows gaming PCs, use WSL2, or fall back to Huggi
 | **Olist Brazilian E-commerce** (Kaggle) | Main live demo, classmates' held-out test | Real company data, about 100k orders, 9 tables. Natural ambiguity (price vs price plus freight, cancelled orders, split payments). No ad spend, so "ad ROI" is a natural can't-answer. Model has never seen it. |
 | **BIRD financial** | Switch-to database, official numbers | Czech bank data. Already in the project. |
 | **BIRD debit_card_specializing** | Switch-to database | Fuel-card company. Already in the project. |
-| **AdventureWorks** | Only if schema selection works by day 10 | About 70 tables, too big for a 1.5B prompt without table selection. |
+| ~~AdventureWorks~~ | Dropped 19 Nov | About 70 tables, too big for a 1.5B prompt without table selection. |
 | **Live upload** | Realness moment | A judge's CSV, or unseen public CSVs on a USB stick. Tell the room: "On new data it sends more to the analyst. That is the safety working." |
 
 Not bringing: TPC-DS (too big and hard for live use), Spider 2.0 (lives in cloud warehouses, cannot be uploaded; mention as future work).
@@ -885,13 +932,14 @@ You design screens in parallel with the backend work. Each block lists what "don
 
 - `ambiguity.py` (did-you-mean with labels), `checks.py`, `knowledge.py`, app.db tables.
 - Inbox endpoints, resolve, meanings, examples, known numbers.
-- **Done when**: the demo sequence works through the API: yellow, fix, similar question green.
+- Added 19 Nov: `lineage.py`, `profile.py` (column stats), saved queries, event log, export, the new API fields.
+- **Done when**: the demo sequence works through the API: Review, fix, similar question Trusted; and a receipt returns lineage.
 
 ### Days 9 to 14 (27 Nov to 2 Dec): frontend
 
 - React + Vite + TypeScript + Tailwind, built from your designs.
-- Order: Ask and Receipt, then Inbox and detail, then Did-you-mean and Can't-answer states, then Data, Knowledge, Trust, Arena.
-- **Done when**: the full 5-question demo runs in the browser.
+- Order: Ask and Receipt (with lineage and export), then Review queue and detail, then Data Explorer, History, Metrics, then Saved, Knowledge, Trust Report, Arena.
+- **Done when**: the full demo runs in the browser.
 
 ### Days 15 to 16 (3 to 4 Dec): private mode on the laptop
 
@@ -911,7 +959,7 @@ You design screens in parallel with the backend work. Each block lists what "don
 
 ### Days 21 to 30 (9 Dec to demo day): buffer
 
-- Fixes, rehearsal, stretch items (hand audit, shuffled-reward control, AdventureWorks).
+- Fixes and rehearsal only. No new features.
 
 ---
 
@@ -981,7 +1029,23 @@ Optional if asked: switch the database, or upload a judge's CSV.
 
 ## 17. What we are not building
 
-Data pipelines, ETL, streaming, a warehouse, full BI dashboards, charts, a generic chatbot, multi-agent systems, our own vector database, 10 models, login and roles, billing, Kubernetes, many integrations, a semantic layer, recurring reports, the "why did it change" engine, data-request tickets, lineage narratives, the reward-hacking perturbation (C4), and the 25 numbered docs.
+Data pipelines, ETL, streaming, a warehouse, full BI dashboards, charts, a generic chatbot, multi-agent systems, our own vector database, 10 models, login and roles, billing, Kubernetes, many integrations, a full semantic layer (the Metrics page is only the saved meanings), recurring reports, the "why did it change" engine, data-request tickets, lineage narratives, the reward-hacking perturbation (C4), and the 25 numbered docs.
+
+Also not now (decided 19 Nov, may come after demo day):
+
+- Data freshness check
+- Source lineage (where the data file came from), separate from answer lineage
+- Investigation and comparison mode ("why did revenue fall?")
+- Cost estimates per query
+- Alerts and monitoring
+- Postgres, Snowflake and Databricks connectors
+- Shadow mode
+- Enterprise audit pack
+- AdventureWorks and schema selection
+- Shuffled-reward control run (C3)
+- Hand audit of BIRD gold queries (C7)
+- Manager / analyst role toggle
+- A per-answer confidence percentage ("Trust: 97%")
 
 ---
 
@@ -1042,6 +1106,45 @@ ollama serve
 ### Open decisions (fill in as they are made)
 
 - Day 6: Gemini in product, yes or no.
-- Day 10: AdventureWorks, yes or no.
-- Day 14: role toggle or two separate views.
 - Final demo day date.
+
+Decided 19 Nov: no AdventureWorks, no role toggle (analyst only).
+
+---
+
+## 19. Priority list
+
+Everything in this plan, in one list. When time runs short, cut from the bottom of Medium first.
+
+### Very important
+
+1. Real numbers: full BIRD evaluation, calibrated thresholds, baselines
+2. Safe verifier
+3. 8 attempts, checks, and Trusted / Review / Reject
+4. Ask page and Trust Receipt
+5. Answer lineage
+6. Two meanings and not in the data
+7. Review queue and detail (approve / fix / reject)
+8. Knowledge loop, with meanings shown as a Metrics page
+9. Trust Report with real numbers
+10. Private mode: Qwen offline on the laptop
+11. Cached demo answers and a backup video
+12. Data Explorer with column stats
+13. History
+
+### Medium
+
+1. Model Arena
+2. 100 Olist questions from classmates
+3. Unanswerable evaluation
+4. Safety test: hostile queries blocked, database file unchanged
+5. Database switcher and upload
+6. Saved queries
+7. Export (CSV, SQL, receipt)
+8. Query time and rows returned
+9. Event log
+10. Hand check of 50 two-meaning cases
+11. Gemini as the second model
+12. Trust slider
+
+Everything else is in section 17.

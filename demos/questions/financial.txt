@@ -1,0 +1,9 @@
+# Demo questions for financial. One per line. Expected answers: demos/questions/EXPECTED.md
+How many accounts are there?
+How many clients are women?
+How many gold cards are there?
+How many accounts were opened in 1996?
+What is the average loan amount?
+How many loans are not paid back?
+Which region has the most accounts?
+What is the credit score of each client?

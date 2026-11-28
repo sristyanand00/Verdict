@@ -1,0 +1,71 @@
+2026-11-26 13:02:34,156 - INFO - Loading /kaggle/working/sft_v2_from_gguf
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:  72%|███████▏  | 243/338 [00:00<00:00, 2425.49it/s]Loading weights: 100%|██████████| 338/338 [00:00<00:00, 2442.31it/s]
+Traceback (most recent call last):
+  File "/kaggle/working/verdict/scripts/evaluate.py", line 180, in <module>
+    sys.exit(ma  answered 32/1534 (62s)
+  answered 64/1534 (123s)
+  answered 96/1534 (188s)
+  answered 128/1534 (234s)
+  answered 160/1534 (275s)
+  answered 192/1534 (316s)
+  answered 224/1534 (341s)
+  answered 256/1534 (360s)
+  answered 288/1534 (384s)
+  answered 320/1534 (401s)
+  answered 352/1534 (458s)
+  answered 384/1534 (529s)
+  answered 416/1534 (612s)
+  answered 448/1534 (691s)
+  answered 480/1534 (772s)
+  answered 512/1534 (851s)
+  answered 544/1534 (929s)
+  answered 576/1534 (977s)
+  answered 608/1534 (1035s)
+  answered 640/1534 (1088s)
+  answered 672/1534 (1142s)
+  answered 704/1534 (1194s)
+  answered 736/1534 (1237s)
+  answered 768/1534 (1261s)
+  answered 800/1534 (1284s)
+  answered 832/1534 (1309s)
+  answered 864/1534 (1356s)
+  answered 896/1534 (1426s)
+  answered 928/1534 (1492s)
+  answered 960/1534 (1556s)
+  answered 992/1534 (1628s)
+  answered 1024/1534 (1706s)
+  answered 1056/1534 (1808s)
+  answered 1088/1534 (1899s)
+  answered 1120/1534 (2007s)
+  answered 1152/1534 (2142s)
+  answered 1184/1534 (2175s)
+  answered 1216/1534 (2215s)
+  answered 1248/1534 (2253s)
+  answered 1280/1534 (2283s)
+  answered 1312/1534 (2313s)
+  answered 1344/1534 (2350s)
+  answered 1376/1534 (2382s)
+  answered 1408/1534 (2419s)
+  answered 1440/1534 (2454s)
+  answered 1472/1534 (2488s)
+  answered 1504/1534 (2517s)
+  answered 1534/1534 (2538s)
+
+sft_v2_gguf (/kaggle/working/sft_v2_from_gguf)
+  overall       1534 questions  correct   666 ( 43.4%, range 41.0-45.9)  ran  1341 ( 87.4%)
+  simple         925 questions  correct   480 ( 51.9%, range 48.7-55.1)  ran   839 ( 90.7%)
+  moderate       464 questions  correct   150 ( 32.3%, range 28.2-36.7)  ran   386 ( 83.2%)
+  challenging    145 questions  correct    36 ( 24.8%, range 18.5-32.4)  ran   116 ( 80.0%)
+
+Why queries failed:
+  unknown column               173
+  syntax error                 9
+  unknown table                4
+  unknown function             4
+  ambiguous column             2
+  timeout                      1
+
+2 answers ran but were marked wrong because the gold query itself failed.
+
+Took 43.6 minutes. Saved /kaggle/working/eval/eval_sft_v2_gguf.jsonl
+ng PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)

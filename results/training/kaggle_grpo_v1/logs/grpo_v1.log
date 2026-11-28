@@ -1,0 +1,166 @@
+
+=== start 2026-11-26 20:11:02: /usr/bin/python3 scripts/train_grpo.py --train-dir /tmp/bird_train --model /tmp/sft_v2_from_gguf --lora-r 16 --lr 1e-5 --epochs 1 --num-tasks 500 --eval-max-tasks 100 --checkpoint-dir /kaggle/working/grpo_v1 --max-schema-chars 12000 --micro-batch-size 2 --save-every 10
+2026-11-26 20:11:11,853 - __main__ - INFO - Loaded 9428 tasks; train 500 {'unknown': 500}, val 200
+Loading model: /tmp/sft_v2_from_gguf
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:  63%|██████▎   | 214/338 [00:00<00:00, 2138.27it/s]Loading weights: 100%|██████████| 338/338 [00:00<00:00, 2192.02it/s]
+Trainable parameters: 18,464,768 of 1,562,179,072 (1.18%)
+
+Training: 500 tasks, 1 epochs, batch 4 x 8 completions, validation: 100 tasks
+GPU: Tesla T4 (15.6 GB)
+  evaluated 100 val tasks in 604s: 46.0% correct, 81.0% ran
+  failed because: unknown column 13, timeout 6
+Validation accuracy before training: 46.0%
+
+======================================================================
+EPOCH 1/1
+======================================================================
+[epoch 1/1 batch 1/125] correct 21/32, ran 29/32, loss -0.0009 | gen 61s, sql 4s, update 27s
+[epoch 1/1 batch 2/125] correct 11/32, ran 24/32, loss -0.0028 | gen 48s, sql 5s, update 26s
+[epoch 1/1 batch 3/125] correct 14/32, ran 30/32, loss -0.0001 | gen 92s, sql 2s, update 122s
+[epoch 1/1 batch 4/125] correct 21/32, ran 30/32, loss -0.0014 | gen 42s, sql 0s, update 36s
+[epoch 1/1 batch 5/125] correct 16/32, ran 27/32, loss -0.0020 | gen 53s, sql 3s, update 42s
+[epoch 1/1 batch 6/125] correct 20/32, ran 30/32, loss -0.0015 | gen 52s, sql 5s, update 37s
+[epoch 1/1 batch 7/125] correct 10/32, ran 24/32, loss +0.0001 | gen 51s, sql 5s, update 31s
+[epoch 1/1 batch 8/125] correct 24/32, ran 29/32, loss -0.0010 | gen 43s, sql 0s, update 14s
+[epoch 1/1 batch 9/125] correct 18/32, ran 28/32, loss -0.0006 | gen 47s, sql 1s, update 28s
+[epoch 1/1 batch 10/125] correct 12/32, ran 23/32, loss -0.0006 | gen 42s, sql 5s, update 28s
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+[epoch 1/1 batch 11/125] correct 4/32, ran 23/32, loss +0.0000 | gen 77s, sql 12s, update 100s
+[epoch 1/1 batch 12/125] correct 10/32, ran 25/32, loss -0.0004 | gen 45s, sql 0s, update 40s
+[epoch 1/1 batch 13/125] correct 15/32, ran 23/32, loss +0.0003 | gen 46s, sql 4s, update 44s
+[epoch 1/1 batch 14/125] correct 16/32, ran 30/32, loss -0.0000 | gen 36s, sql 4s, update 5s
+[epoch 1/1 batch 15/125] correct 13/32, ran 18/32, loss -0.0000 | gen 45s, sql 8s, update 21s
+[epoch 1/1 batch 16/125] correct 5/32, ran 20/32, loss -0.0036 | gen 77s, sql 13s, update 56s
+[epoch 1/1 batch 17/125] correct 11/32, ran 18/32, loss -0.0006 | gen 37s, sql 5s, update 10s
+[epoch 1/1 batch 18/125] correct 14/32, ran 18/32, loss -0.0008 | gen 50s, sql 5s, update 36s
+[epoch 1/1 batch 19/125] correct 9/32, ran 21/32, loss -0.0006 | gen 35s, sql 15s, update 11s
+[epoch 1/1 batch 20/125] correct 11/32, ran 26/32, loss -0.0008 | gen 55s, sql 1s, update 12s
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+[epoch 1/1 batch 21/125] correct 20/32, ran 22/32, loss -0.0004 | gen 63s, sql 5s, update 67s
+[epoch 1/1 batch 22/125] correct 11/32, ran 20/32, loss -0.0005 | gen 69s, sql 0s, update 64s
+[epoch 1/1 batch 23/125] correct 13/32, ran 27/32, loss -0.0012 | gen 77s, sql 2s, update 60s
+[epoch 1/1 batch 24/125] correct 28/32, ran 30/32, loss -0.0004 | gen 29s, sql 0s, update 5s
+[epoch 1/1 batch 25/125] correct 0/32, ran 22/32, loss -0.0002 | gen 101s, sql 0s, update 99s
+[epoch 1/1 batch 26/125] correct 6/32, ran 14/32, loss +0.0002 | gen 38s, sql 0s, update 10s
+[epoch 1/1 batch 27/125] correct 19/32, ran 24/32, loss -0.0007 | gen 57s, sql 5s, update 37s
+[epoch 1/1 batch 28/125] correct 3/32, ran 24/32, loss +0.0001 | gen 62s, sql 5s, update 37s
+[epoch 1/1 batch 29/125] correct 10/32, ran 15/32, loss -0.0002 | gen 43s, sql 5s, update 40s
+[epoch 1/1 batch 30/125] correct 20/32, ran 24/32, loss -0.0006 | gen 49s, sql 9s, update 44s
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+[epoch 1/1 batch 31/125] correct 15/32, ran 28/32, loss -0.0001 | gen 40s, sql 1s, update 46s
+[epoch 1/1 batch 32/125] correct 31/32, ran 32/32, loss -0.0002 | gen 38s, sql 4s, update 18s
+[epoch 1/1 batch 33/125] correct 15/32, ran 24/32, loss -0.0003 | gen 57s, sql 5s, update 55s
+[epoch 1/1 batch 34/125] correct 8/32, ran 17/32, loss -0.0002 | gen 94s, sql 6s, update 69s
+[epoch 1/1 batch 35/125] correct 15/32, ran 20/32, loss -0.0002 | gen 36s, sql 5s, update 18s
+[epoch 1/1 batch 36/125] correct 12/32, ran 21/32, loss +0.0003 | gen 61s, sql 6s, update 50s
+[epoch 1/1 batch 37/125] correct 22/32, ran 30/32, loss -0.0005 | gen 51s, sql 0s, update 41s
+[epoch 1/1 batch 38/125] correct 18/32, ran 28/32, loss -0.0002 | gen 62s, sql 1s, update 27s
+[epoch 1/1 batch 39/125] correct 11/32, ran 24/32, loss -0.0011 | gen 33s, sql 13s, update 17s
+[epoch 1/1 batch 40/125] correct 15/32, ran 26/32, loss -0.0024 | gen 59s, sql 2s, update 67s
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+[epoch 1/1 batch 41/125] correct 19/32, ran 31/32, loss +0.0000 | gen 41s, sql 8s, update 19s
+[epoch 1/1 batch 42/125] correct 18/32, ran 28/32, loss -0.0004 | gen 45s, sql 3s, update 37s
+[epoch 1/1 batch 43/125] correct 6/32, ran 16/32, loss -0.0013 | gen 63s, sql 1s, update 79s
+[epoch 1/1 batch 44/125] correct 15/32, ran 21/32, loss -0.0014 | gen 87s, sql 0s, update 96s
+[epoch 1/1 batch 45/125] correct 14/32, ran 20/32, loss -0.0016 | gen 71s, sql 0s, update 47s
+[epoch 1/1 batch 46/125] correct 14/32, ran 22/32, loss -0.0005 | gen 44s, sql 5s, update 43s
+[epoch 1/1 batch 47/125] correct 18/32, ran 32/32, loss +0.0003 | gen 60s, sql 0s, update 37s
+[epoch 1/1 batch 48/125] correct 14/32, ran 26/32, loss -0.0004 | gen 49s, sql 5s, update 47s
+[epoch 1/1 batch 49/125] correct 10/32, ran 23/32, loss -0.0008 | gen 46s, sql 1s, update 35s
+[epoch 1/1 batch 50/125] correct 9/32, ran 21/32, loss -0.0001 | gen 52s, sql 1s, update 38s
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+[epoch 1/1 batch 51/125] correct 6/32, ran 14/32, loss -0.0016 | gen 63s, sql 0s, update 54s
+[epoch 1/1 batch 52/125] correct 30/32, ran 31/32, loss -0.0020 | gen 43s, sql 1s, update 3s
+[epoch 1/1 batch 53/125] correct 13/32, ran 19/32, loss -0.0006 | gen 80s, sql 6s, update 72s
+[epoch 1/1 batch 54/125] correct 12/32, ran 29/32, loss -0.0009 | gen 43s, sql 5s, update 20s
+[epoch 1/1 batch 55/125] correct 27/32, ran 29/32, loss -0.0026 | gen 31s, sql 0s, update 19s
+[epoch 1/1 batch 56/125] correct 11/32, ran 22/32, loss -0.0006 | gen 48s, sql 5s, update 45s
+[epoch 1/1 batch 57/125] correct 20/32, ran 31/32, loss -0.0005 | gen 43s, sql 1s, update 14s
+[epoch 1/1 batch 58/125] correct 16/32, ran 27/32, loss -0.0000 | gen 44s, sql 0s, update 45s
+[epoch 1/1 batch 59/125] correct 12/32, ran 29/32, loss -0.0006 | gen 80s, sql 0s, update 58s
+[epoch 1/1 batch 60/125] correct 13/32, ran 23/32, loss -0.0007 | gen 49s, sql 0s, update 44s
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+[epoch 1/1 batch 61/125] correct 3/32, ran 28/32, loss -0.0005 | gen 58s, sql 0s, update 41s
+[epoch 1/1 batch 62/125] correct 24/32, ran 31/32, loss -0.0007 | gen 49s, sql 3s, update 27s
+[epoch 1/1 batch 63/125] correct 13/32, ran 29/32, loss -0.0018 | gen 59s, sql 1s, update 46s
+[epoch 1/1 batch 64/125] correct 18/32, ran 29/32, loss -0.0004 | gen 67s, sql 1s, update 41s
+[epoch 1/1 batch 65/125] correct 18/32, ran 31/32, loss +0.0001 | gen 36s, sql 8s, update 19s
+[epoch 1/1 batch 66/125] correct 20/32, ran 26/32, loss -0.0007 | gen 35s, sql 1s, update 36s
+[epoch 1/1 batch 67/125] correct 16/32, ran 24/32, loss -0.0003 | gen 55s, sql 1s, update 45s
+[epoch 1/1 batch 68/125] correct 8/32, ran 12/32, loss -0.0002 | gen 79s, sql 11s, update 95s
+[epoch 1/1 batch 69/125] correct 16/32, ran 27/32, loss -0.0019 | gen 51s, sql 4s, update 38s
+[epoch 1/1 batch 70/125] correct 26/32, ran 30/32, loss -0.0008 | gen 41s, sql 1s, update 49s
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+[epoch 1/1 batch 71/125] correct 23/32, ran 29/32, loss -0.0006 | gen 62s, sql 12s, update 52s
+[epoch 1/1 batch 72/125] correct 18/32, ran 22/32, loss -0.0008 | gen 46s, sql 0s, update 36s
+[epoch 1/1 batch 73/125] correct 14/32, ran 29/32, loss -0.0015 | gen 49s, sql 9s, update 40s
+[epoch 1/1 batch 74/125] correct 22/32, ran 32/32, loss +0.0001 | gen 44s, sql 2s, update 44s
+[epoch 1/1 batch 75/125] correct 8/32, ran 23/32, loss -0.0004 | gen 58s, sql 8s, update 65s
+[epoch 1/1 batch 76/125] correct 16/32, ran 21/32, loss -0.0004 | gen 55s, sql 1s, update 42s
+[epoch 1/1 batch 77/125] correct 17/32, ran 23/32, loss -0.0001 | gen 41s, sql 5s, update 13s
+[epoch 1/1 batch 78/125] correct 16/32, ran 25/32, loss -0.0004 | gen 74s, sql 1s, update 16s
+[epoch 1/1 batch 79/125] correct 16/32, ran 24/32, loss -0.0002 | gen 41s, sql 7s, update 44s
+[epoch 1/1 batch 80/125] correct 20/32, ran 32/32, loss -0.0007 | gen 58s, sql 1s, update 10s
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+[epoch 1/1 batch 81/125] correct 15/32, ran 23/32, loss -0.0003 | gen 34s, sql 5s, update 4s
+[epoch 1/1 batch 82/125] correct 8/32, ran 22/32, loss -0.0002 | gen 92s, sql 6s, update 66s
+[epoch 1/1 batch 83/125] correct 16/32, ran 20/32, loss -0.0010 | gen 74s, sql 0s, update 60s
+[epoch 1/1 batch 84/125] correct 18/32, ran 31/32, loss +0.0001 | gen 40s, sql 1s, update 23s
+[epoch 1/1 batch 85/125] correct 21/32, ran 27/32, loss -0.0014 | gen 42s, sql 0s, update 51s
+[epoch 1/1 batch 86/125] correct 14/32, ran 26/32, loss -0.0016 | gen 27s, sql 11s, update 19s
+[epoch 1/1 batch 87/125] correct 22/32, ran 25/32, loss -0.0002 | gen 74s, sql 0s, update 28s
+[epoch 1/1 batch 88/125] correct 30/32, ran 32/32, loss +0.0000 | gen 27s, sql 1s, update 4s
+[epoch 1/1 batch 89/125] correct 25/32, ran 32/32, loss -0.0003 | gen 49s, sql 0s, update 31s
+[epoch 1/1 batch 90/125] correct 24/32, ran 24/32, loss +0.0000 | gen 28s, sql 5s, update 0s
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+[epoch 1/1 batch 91/125] correct 12/32, ran 29/32, loss -0.0006 | gen 33s, sql 1s, update 25s
+[epoch 1/1 batch 92/125] correct 22/32, ran 31/32, loss -0.0004 | gen 29s, sql 2s, update 29s
+[epoch 1/1 batch 93/125] correct 21/32, ran 28/32, loss -0.0013 | gen 51s, sql 0s, update 42s
+[epoch 1/1 batch 94/125] correct 22/32, ran 26/32, loss -0.0005 | gen 43s, sql 0s, update 28s
+[epoch 1/1 batch 95/125] correct 8/32, ran 24/32, loss +0.0000 | gen 47s, sql 8s, update 0s
+[epoch 1/1 batch 96/125] correct 14/32, ran 26/32, loss -0.0001 | gen 44s, sql 0s, update 41s
+[epoch 1/1 batch 97/125] correct 7/32, ran 13/32, loss -0.0012 | gen 42s, sql 0s, update 25s
+[epoch 1/1 batch 98/125] correct 24/32, ran 24/32, loss +0.0000 | gen 29s, sql 0s, update 0s
+[epoch 1/1 batch 99/125] correct 17/32, ran 23/32, loss +0.0002 | gen 30s, sql 6s, update 16s
+[epoch 1/1 batch 100/125] correct 20/32, ran 28/32, loss -0.0004 | gen 35s, sql 6s, update 12s
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+[epoch 1/1 batch 101/125] correct 28/32, ran 28/32, loss -0.0000 | gen 38s, sql 1s, update 16s
+[epoch 1/1 batch 102/125] correct 7/32, ran 13/32, loss -0.0007 | gen 49s, sql 0s, update 29s
+[epoch 1/1 batch 103/125] correct 22/32, ran 31/32, loss -0.0006 | gen 65s, sql 0s, update 16s
+[epoch 1/1 batch 104/125] correct 11/32, ran 28/32, loss +0.0011 | gen 74s, sql 0s, update 64s
+[epoch 1/1 batch 105/125] correct 19/32, ran 19/32, loss -0.0013 | gen 41s, sql 0s, update 19s
+[epoch 1/1 batch 106/125] correct 24/32, ran 25/32, loss +0.0002 | gen 37s, sql 7s, update 17s
+[epoch 1/1 batch 107/125] correct 15/32, ran 22/32, loss -0.0006 | gen 40s, sql 6s, update 32s
+[epoch 1/1 batch 108/125] correct 15/32, ran 17/32, loss -0.0000 | gen 45s, sql 5s, update 38s
+[epoch 1/1 batch 109/125] correct 11/32, ran 17/32, loss +0.0002 | gen 65s, sql 4s, update 50s
+[epoch 1/1 batch 110/125] correct 23/32, ran 32/32, loss -0.0002 | gen 34s, sql 1s, update 22s
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+[epoch 1/1 batch 111/125] correct 18/32, ran 23/32, loss -0.0020 | gen 35s, sql 7s, update 11s
+[epoch 1/1 batch 112/125] correct 10/32, ran 19/32, loss -0.0003 | gen 40s, sql 8s, update 12s
+[epoch 1/1 batch 113/125] correct 12/32, ran 21/32, loss -0.0004 | gen 51s, sql 1s, update 15s
+[epoch 1/1 batch 114/125] correct 15/32, ran 24/32, loss -0.0009 | gen 78s, sql 6s, update 67s
+[epoch 1/1 batch 115/125] correct 15/32, ran 21/32, loss -0.0001 | gen 69s, sql 0s, update 45s
+[epoch 1/1 batch 116/125] correct 16/32, ran 24/32, loss +0.0000 | gen 40s, sql 5s, update 0s
+[epoch 1/1 batch 117/125] correct 31/32, ran 32/32, loss -0.0002 | gen 29s, sql 0s, update 9s
+[epoch 1/1 batch 118/125] correct 19/32, ran 24/32, loss -0.0011 | gen 39s, sql 1s, update 30s
+[epoch 1/1 batch 119/125] correct 7/32, ran 21/32, loss -0.0008 | gen 105s, sql 5s, update 41s
+[epoch 1/1 batch 120/125] correct 27/32, ran 32/32, loss -0.0019 | gen 48s, sql 4s, update 26s
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+[epoch 1/1 batch 121/125] correct 23/32, ran 31/32, loss -0.0005 | gen 37s, sql 0s, update 14s
+[epoch 1/1 batch 122/125] correct 12/32, ran 23/32, loss -0.0008 | gen 49s, sql 5s, update 37s
+[epoch 1/1 batch 123/125] correct 21/32, ran 22/32, loss -0.0006 | gen 36s, sql 0s, update 13s
+[epoch 1/1 batch 124/125] correct 19/32, ran 32/32, loss -0.0015 | gen 44s, sql 3s, update 47s
+[epoch 1/1 batch 125/125] correct 24/32, ran 32/32, loss +0.0000 | gen 70s, sql 1s, update 0s
+  evaluated 100 val tasks in 555s: 50.0% correct, 85.0% ran
+  failed because: unknown column 10, timeout 5
+
+Epoch 1 done in 11265s | reward 0.5279 +/- 0.4734 | train accuracy 50.0% | val accuracy 50.0%
+Saved checkpoint: /kaggle/working/grpo_v1/latest (epoch 1)
+Saved checkpoint: /kaggle/working/grpo_v1/best (epoch 1)
+2026-11-26 23:38:19,561 - __main__ - INFO - Training finished in 207.1 minutes
+2026-11-26 23:38:19,562 - __main__ - INFO - Reward: first epoch 0.5279, last epoch 0.5279
+2026-11-26 23:38:19,562 - __main__ - INFO - Validation accuracy: 46.0% before, best 50.0% after
+2026-11-26 23:38:19,562 - __main__ - INFO - Results: /kaggle/working/eval/training_results.json
+2026-11-26 23:38:19,562 - __main__ - INFO - Checkpoints: /kaggle/working/grpo_v1 (latest/ and best/)
+
+=== end 2026-11-26 23:38:23: exit code 0, 207.3 minutes

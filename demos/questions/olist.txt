@@ -1,0 +1,13 @@
+# Demo questions for olist. One per line. Expected answers: demos/questions/EXPECTED.md
+How many orders are there?
+How many orders were canceled?
+Which payment type is used most often?
+What is the average review score?
+How many sellers are in the state SP?
+Which product category has the most products?
+How many customers do we have?
+What was the total revenue in 2017?
+How many orders were delivered late in 2018?
+How many orders were delivered late in 2017?
+What was our return on ad spend in 2018?
+How many people visited the website last month?

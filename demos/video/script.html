@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verdict demo video: reading script</title>
+<style>
+  @page { size: 148mm 210mm; margin: 12mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; max-width: 640px; padding: 20px; background: #fff; color: #111; font: 17px/1.5 "Segoe UI", Arial, sans-serif; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 34px 0 6px; padding-top: 14px; border-top: 3px solid #111; }
+  .sub { color: #555; margin: 0 0 14px; }
+  .block { margin: 18px 0; padding: 12px 14px; border: 1.5px solid #bbb; border-radius: 8px; page-break-inside: avoid; }
+  .where { font-size: 14px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1558C9; }
+  .do { margin: 6px 0; padding: 6px 10px; background: #f1f1f1; border-radius: 6px; font-size: 15.5px; }
+  .do b { color: #000; }
+  .say { margin: 8px 0 0; font-size: 19px; line-height: 1.55; }
+  .note { font-size: 15px; color: #444; }
+  code, pre { font-family: Consolas, monospace; font-size: 13.5px; }
+  pre { white-space: pre-wrap; background: #f1f1f1; padding: 10px; border-radius: 6px; margin: 6px 0; }
+  ul { margin: 6px 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+
+<h1>Verdict demo video</h1>
+<p class="sub">Reading script. Blue line = where you are. Grey box = what to do. Big text = what to say.</p>
+
+<div class="block">
+  <div class="where">Before you start</div>
+  <ul class="note">
+    <li>Run the reset: <code>powershell -ExecutionPolicy Bypass -File demos\video\reset_demo.ps1</code></li>
+    <li>Tab 1: <code>demos/video/explainer.html</code>, full screen (F11).</li>
+    <li>Tab 2: <code>localhost:8000/ask?replay=1</code>, logged in as <code>video@verdict.local</code>, database Olist.</li>
+    <li>Keep the three questions and the SQL at the end of this page ready to paste.</li>
+    <li>Use the keyboard, not the mouse, in Part 1.</li>
+  </ul>
+</div>
+
+<h2>Part 1: the explainer (about 90 seconds)</h2>
+<p class="sub">Press Space to start. Read one block, then press Space for the next scene.</p>
+
+<div class="block">
+  <div class="where">Scene 1 &middot; Why this is needed</div>
+  <div class="do"><b>Do:</b> press Space. Start reading when the title appears.</div>
+  <p class="say">Companies make decisions on numbers from their data, and AI now writes the SQL behind them. On BIRD, the standard benchmark, even the best systems get about one question in five wrong.</p>
+</div>
+
+<div class="block">
+  <div class="where">Scene 2 &middot; The silent failure</div>
+  <div class="do"><b>Do:</b> press Space.</div>
+  <p class="say">And a wrong query does not fail. In our own test, the model searched for CANCELED in capitals. The data stores it in small letters. It answered zero. The real answer was 625.</p>
+</div>
+
+<div class="block">
+  <div class="where">Scene 3 &middot; Eight attempts in a sandbox</div>
+  <div class="do"><b>Do:</b> press Space.</div>
+  <p class="say">Verdict asks the model eight times, with some randomness so the attempts differ. Each query runs in its own process: read-only, checked by the database itself, and killed if it runs too long.</p>
+</div>
+
+<div class="block">
+  <div class="where">Scene 4 &middot; Group, then decide</div>
+  <div class="do"><b>Do:</b> press Space. The three stamps appear one by one; match them as you speak.</div>
+  <p class="say">We group attempts by their result, not their text, because different queries can be equally right. Six of eight agreeing is Trusted. A split, an empty answer or a zero goes to Review. If the data cannot answer, Reject.</p>
+</div>
+
+<div class="block">
+  <div class="where">Scene 5 &middot; Our own model</div>
+  <div class="do"><b>Do:</b> press Space.</div>
+  <p class="say">The model is our own. We fine-tuned Qwen with LoRA, which trains a small add-on and leaves the model frozen. On 1,534 unseen questions it went from 24.6 to 43.5 percent.</p>
+</div>
+
+<div class="block">
+  <div class="where">Scene 6 &middot; Reinforcement learning</div>
+  <div class="do"><b>Do:</b> press Space. Do not move on until the bottom panel has appeared.</div>
+  <p class="say">Next is reinforcement learning, with a GRPO loop we wrote by hand. Each query runs on the real database: one point for a right result, a tenth for one that only runs. Answers that beat their group's average are reinforced. In a small run the model learned to chase that tenth, so we test for it.</p>
+</div>
+
+<div class="block">
+  <div class="where">Scene 7 &middot; What runs today</div>
+  <div class="do"><b>Do:</b> press Space. After the last word, press Space once more: the screen wipes to black.</div>
+  <p class="say">The finished model is a 1.6 gigabyte file that runs on a laptop with no internet, backed by 321 automated tests. Here is the real app.</p>
+</div>
+
+<h2>Part 2: the real app (about 80 seconds)</h2>
+<p class="sub">Switch to Tab 2. Each answer takes about 9 seconds to build on screen. Talk while it builds.</p>
+
+<div class="block">
+  <div class="where">Section: Ask page</div>
+  <div class="do"><b>Do:</b> show the page for a second. Database says Olist e-commerce.</div>
+  <p class="say">This is the real app. The data is Olist, a real online store with about 100,000 orders. What you will see is a recorded run from our own model, replayed.</p>
+</div>
+
+<div class="block">
+  <div class="where">Section: Ask page &middot; first question</div>
+  <div class="do"><b>Do:</b> paste <b>How many orders were canceled?</b> and press Ask. Read while the eight queries appear.</div>
+  <p class="say">The same question from before. Verdict writes eight queries, runs each one in the sandbox, and groups the results.</p>
+  <div class="do"><b>Wait</b> for the green TRUSTED card.</div>
+  <p class="say">Trusted: 625. Six of eight attempts agree.</p>
+</div>
+
+<div class="block">
+  <div class="where">Section: Receipt (opens from the answer card)</div>
+  <div class="do"><b>Do:</b> open the receipt. Move slowly: attempts first, then the checks. Close it when done.</div>
+  <p class="say">This is the receipt. Here are all eight queries. Two of them added a join that was not needed and got 542. They were outvoted. These checks ran. These two say off, because they did not run.</p>
+</div>
+
+<div class="block">
+  <div class="where">Section: Ask page &middot; second question</div>
+  <div class="do"><b>Do:</b> paste <b>How many orders were delivered late in 2018?</b> and press Ask. Read while it builds.</div>
+  <p class="say">A harder question. All eight queries run without an error, and they give seven different answers.</p>
+  <div class="do"><b>Wait</b> for the red REJECT card.</div>
+  <p class="say">Any one of these alone would look fine. Verdict shows no number and sends it to a person.</p>
+</div>
+
+<div class="block">
+  <div class="where">Section: Review queue (left menu)</div>
+  <div class="do"><b>Do:</b> click Review queue. Open the "delivered late in 2018" item. Paste the SQL from the end of this page, click Run (it shows 4,944), then click <b>Approve my fix</b>.</div>
+  <p class="say">The analyst sees only these cases. I run the right query, 4,944, and approve it. It is saved with the question for later use.</p>
+</div>
+
+<div class="block">
+  <div class="where">Section: Ask page &middot; third question</div>
+  <div class="do"><b>Do:</b> click Ask in the left menu. Paste <b>What was our return on ad spend in 2018?</b> and press Ask. Wait for the red REJECT card.</div>
+  <p class="say">And a question the data cannot answer. There is no advertising spend in this database. Five of eight attempts said so, and Verdict rejects it without making up a number.</p>
+</div>
+
+<div class="block">
+  <div class="where">Section: Ask page &middot; close</div>
+  <div class="do"><b>Do:</b> stay on the Reject card. Stop recording after the last word.</div>
+  <p class="say">Verdict gives every answer a level, shows its evidence, and says when it does not know. One honest limit: agreement is not proof. Measuring how often Trusted is wrong is our next step. Thank you.</p>
+</div>
+
+<h2>Keep ready to paste</h2>
+<div class="block">
+  <div class="where">Questions</div>
+  <pre>How many orders were canceled?</pre>
+  <pre>How many orders were delivered late in 2018?</pre>
+  <pre>What was our return on ad spend in 2018?</pre>
+  <div class="where">SQL for the review step</div>
+  <pre>SELECT COUNT(*) FROM orders WHERE order_status = 'delivered' AND order_delivered_customer_date &gt; order_estimated_delivery_date AND strftime('%Y', order_purchase_timestamp) = '2018'</pre>
+</div>
+
+<div class="block">
+  <div class="where">If something goes wrong</div>
+  <ul class="note">
+    <li>Red box "model is not available": the question was not typed exactly. Paste it from this page.</li>
+    <li>You approved once already: run the reset, then record Part 2 again.</li>
+    <li>Do not ask any other question in the video. Only these three are safe in this order.</li>
+  </ul>
+</div>
+
+</body>
+</html>

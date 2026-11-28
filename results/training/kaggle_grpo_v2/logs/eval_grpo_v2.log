@@ -1,0 +1,73 @@
+
+=== start 2026-11-27 14:24:58: /usr/bin/python3 scripts/evaluate.py --model /kaggle/working/grpo_v2/best --label grpo_v2 --max-schema-chars 12000 --timeout 30 --workers 4 --gen-batch 8
+2026-11-27 14:25:07,156 - INFO - Loading /kaggle/working/grpo_v2/best
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:  70%|███████   | 238/338 [00:00<00:00, 2373.64it/s]Loading weights: 100%|██████████| 338/338 [00:00<00:00, 2394.43it/s]
+2026-11-27 14:25:30,018 - INFO - Answering 1534 BIRD dev questions (timeout 30s, 4 workers, batch 8, precision torch.float16)
+  answered 32/1534 (81s)
+  answered 64/1534 (151s)
+  answered 96/1534 (228s)
+  answered 128/1534 (283s)
+  answered 160/1534 (339s)
+  answered 192/1534 (394s)
+  answered 224/1534 (430s)
+  answered 256/1534 (462s)
+  answered 288/1534 (501s)
+  answered 320/1534 (532s)
+  answered 352/1534 (600s)
+  answered 384/1534 (678s)
+  answered 416/1534 (769s)
+  answered 448/1534 (858s)
+  answered 480/1534 (946s)
+  answered 512/1534 (1028s)
+  answered 544/1534 (1116s)
+  answered 576/1534 (1170s)
+  answered 608/1534 (1237s)
+  answered 640/1534 (1297s)
+  answered 672/1534 (1359s)
+  answered 704/1534 (1420s)
+  answered 736/1534 (1472s)
+  answered 768/1534 (1506s)
+  answered 800/1534 (1540s)
+  answered 832/1534 (1573s)
+  answered 864/1534 (1626s)
+  answered 896/1534 (1709s)
+  answered 928/1534 (1785s)
+  answered 960/1534 (1864s)
+  answered 992/1534 (1949s)
+  answered 1024/1534 (2040s)
+  answered 1056/1534 (2151s)
+  answered 1088/1534 (2252s)
+  answered 1120/1534 (2366s)
+  answered 1152/1534 (2534s)
+  answered 1184/1534 (2579s)
+  answered 1216/1534 (2629s)
+  answered 1248/1534 (2681s)
+  answered 1280/1534 (2720s)
+  answered 1312/1534 (2783s)
+  answered 1344/1534 (2832s)
+  answered 1376/1534 (2873s)
+  answered 1408/1534 (2918s)
+  answered 1440/1534 (2963s)
+  answered 1472/1534 (3009s)
+  answered 1504/1534 (3055s)
+  answered 1534/1534 (3088s)
+
+grpo_v2 (/kaggle/working/grpo_v2/best)
+  overall       1534 questions  correct   686 ( 44.7%, range 42.2-47.2)  ran  1362 ( 88.8%)
+  simple         925 questions  correct   485 ( 52.4%, range 49.2-55.6)  ran   845 ( 91.4%)
+  moderate       464 questions  correct   157 ( 33.8%, range 29.7-38.3)  ran   397 ( 85.6%)
+  challenging    145 questions  correct    44 ( 30.3%, range 23.4-38.3)  ran   120 ( 82.8%)
+
+Why queries failed:
+  unknown column               152
+  syntax error                 11
+  ambiguous column             4
+  unknown function             3
+  unknown table                1
+  timeout                      1
+
+2 answers ran but were marked wrong because the gold query itself failed.
+
+Took 52.8 minutes. Saved /kaggle/working/eval/eval_grpo_v2.jsonl
+
+=== end 2026-11-27 15:18:21: exit code 0, 53.4 minutes
