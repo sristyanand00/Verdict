@@ -209,6 +209,11 @@ def final_verdict(
         review.append(Reason("agreement", f"{top.size} of {n} attempts agree; trusted needs {need}."))
     if top.is_empty_answer:
         review.append(Reason("empty", "The answer is empty (no rows, or only NULL)."))
+    elif top.is_zero_answer:
+        review.append(Reason(
+            "zero", "The answer is 0. A filter on a value the data does not use also gives 0, "
+                    "so a person should check it.",
+        ))
     if conflict:
         review.append(Reason("conflict", conflict))
     if second_model_agrees is False:

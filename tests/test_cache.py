@@ -70,3 +70,20 @@ def test_provider_asks_are_free_and_can_clear_the_cache(cenv):
     assert client.get("/api/admin/cache").status_code == 403
     assert admin.delete("/api/admin/cache").json() == {"ok": True, "removed": 1}
     assert admin.get("/api/admin/cache").json() == []
+
+
+def test_model_down_after_a_knowledge_change_serves_the_earlier_answer(cenv):
+    client, w, _ = cenv
+    w.replies = [block("SELECT COUNT(*) FROM students")] * 8
+    ask(client, "How many students?")
+    client.post("/api/knowledge/meanings", json={"database_id": "tiny", "term": "x", "definition": "y"})
+    w.down = True
+    r = ask(client, "How many students?")
+    assert r["cache_hit"] is True and r["cache_stale"] is True and r["answer_text"] == "3"
+    # a question that was never answered still fails
+    assert client.post("/api/ask", json={"question": "Something new?"}).status_code == 503
+    # with the model back, the next ask runs fresh on the new knowledge
+    w.down = False
+    w.replies = [block("SELECT 99")] * 8
+    r = ask(client, "How many students?")
+    assert r["cache_hit"] is False and r["answer_text"] == "99"

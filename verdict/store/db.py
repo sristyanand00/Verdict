@@ -98,6 +98,14 @@ CREATE INDEX IF NOT EXISTS cache_db ON ask_cache(database_id);
 CREATE TABLE IF NOT EXISTS knowledge_versions (
     database_id TEXT PRIMARY KEY, version INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS ask_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL,
+    kind TEXT NOT NULL, user_id TEXT, database_id TEXT, model TEXT,
+    outcome TEXT NOT NULL, cache_hit INTEGER NOT NULL DEFAULT 0, level TEXT,
+    n_attempts INTEGER, total_ms INTEGER, model_ms INTEGER,
+    prompt_tokens INTEGER, completion_tokens INTEGER, ask_id TEXT
+);
+CREATE INDEX IF NOT EXISTS ask_log_created ON ask_log(created_at);
 """
 
 #: Columns added after the first release. Old app.db files get them on open.
@@ -517,6 +525,34 @@ class Store:
         return self._all(
             "SELECT database_id, question, created_at FROM ask_cache ORDER BY created_at DESC"
         )
+
+    # -- usage log (the provider's statistics) ----------------------------------
+
+    LOG_FIELDS = ("kind", "user_id", "database_id", "model", "outcome", "cache_hit", "level",
+                  "n_attempts", "total_ms", "model_ms", "prompt_tokens", "completion_tokens", "ask_id")
+
+    def log_run(self, **fields: Any) -> None:
+        """One row per question run: asks and Arena runs, answered, cached or failed."""
+        row = {k: fields.get(k) for k in self.LOG_FIELDS}
+        row["cache_hit"] = int(bool(row["cache_hit"]))
+        cols = ", ".join(("created_at", *self.LOG_FIELDS))
+        marks = ", ".join("?" * (len(self.LOG_FIELDS) + 1))
+        self._run(f"INSERT INTO ask_log ({cols}) VALUES ({marks})",
+                  (fields.get("created_at") or now(), *row.values()))
+
+    def run_log(self, since: str | None = None) -> list[dict]:
+        if since:
+            return self._all("SELECT * FROM ask_log WHERE created_at >= ? ORDER BY id", (since,))
+        return self._all("SELECT * FROM ask_log ORDER BY id")
+
+    def stats_counts(self) -> dict[str, int]:
+        one = lambda sql: int(self._one(sql)["n"])  # noqa: E731
+        return {
+            "users": one("SELECT COUNT(*) AS n FROM users"),
+            "review_open": one("SELECT COUNT(*) AS n FROM review_items WHERE status = 'open'"),
+            "review_done": one("SELECT COUNT(*) AS n FROM review_items WHERE status != 'open'"),
+            "flagged_trusted": one("SELECT COUNT(*) AS n FROM asks WHERE flagged = 1 AND level = 'trusted'"),
+        }
 
     # -- settings ------------------------------------------------------------
 

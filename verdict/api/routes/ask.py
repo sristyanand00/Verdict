@@ -35,12 +35,26 @@ log = logging.getLogger("verdict.api")
 NO_CREDITS = "You have no credits left. Ask the provider for more."
 
 
-def cache_key(s, db_id: str, question: str, model_id: str, second_id: str) -> str:
+def cache_key(s, db_id: str, question: str, model_id: str, second_id: str, version: int | None = None) -> str:
     """Same database, same question (case and spacing ignored), same model and
     setup, same knowledge version: same key."""
-    parts = [db_id, normalize(question), model_id, second_id, str(s.attempts),
-             str(s.store.knowledge_version(db_id))]
+    v = s.store.knowledge_version(db_id) if version is None else version
+    parts = [db_id, normalize(question), model_id, second_id, str(s.attempts), str(v)]
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+
+
+def earlier_cached(s, db_id: str, key_for) -> dict | None:
+    """The newest answer cached under an earlier knowledge version, or None.
+
+    Used only when the model cannot answer right now: an answer checked before
+    the last knowledge change is better than no answer, and it is marked
+    ``cache_stale`` so the page can say so. ``key_for(version)`` builds the key.
+    """
+    for v in range(s.store.knowledge_version(db_id) - 1, -1, -1):
+        hit = s.store.cache_get(key_for(v))
+        if hit is not None:
+            return hit
+    return None
 
 
 def perform_ask(
@@ -77,23 +91,38 @@ def perform_ask(
     try:
         start = time.perf_counter()
         cached = s.store.cache_get(key) if s.cache_enabled and not fresh else None
+        stale = False
+        if cached is None:
+            try:
+                resp = _run_fresh(s, db, model, m2, question, start)
+            except HTTPException as e:
+                log_failure(s, "ask", user, db.id, model.id, e, start)
+                # The model is down or too slow: fall back to the answer saved
+                # before the last knowledge change, if there is one.
+                if s.cache_enabled and not fresh and outcome_of(e) in ("model_down", "timeout"):
+                    cached = earlier_cached(
+                        s, db.id, lambda v: cache_key(s, db.id, question, model.id, m2.id if m2 else "", v))
+                if cached is None:
+                    raise
+                stale = True
+            else:
+                if s.cache_enabled:
+                    s.store.cache_put(key, db.id, question, resp)
         if cached is not None:
             resp = dict(cached["response"])
             resp.update(
                 ask_id=new_id("a"), question=question, created_at=now(),
                 latency_ms=int((time.perf_counter() - start) * 1000),
-                cache_hit=True, cached_at=cached["created_at"],
+                cache_hit=True, cached_at=cached["created_at"], cache_stale=stale,
                 review_id=None, flagged=False, flag_note=None,
             )
-        else:
-            resp = _run_fresh(s, db, model, m2, question, start)
-            if s.cache_enabled:
-                s.store.cache_put(key, db.id, question, resp)
+            resp["usage"] = dict(NO_USAGE)
         try:
             s.store.save_ask_and_charge(resp, user["id"], price)
         except NotEnoughCredits:
             # Only if the provider took credits back while this ask ran.
             raise HTTPException(402, NO_CREDITS) from None
+        log_success(s, "ask", user, db.id, model.id, resp)
     finally:
         s.release_credits(user["id"], price)
 
@@ -106,6 +135,66 @@ def perform_ask(
 BUSY = "The server is busy with other questions. Try again in a minute. You were not charged."
 TOO_SLOW = "The question took too long to answer, so it was stopped. You were not charged."
 MODEL_DOWN = "The model is not reachable right now. Try again later. You were not charged."
+
+#: "usage" of an answer that did not call a model (a cache hit).
+NO_USAGE = {"model_ms": 0, "prompt_tokens": 0, "completion_tokens": 0}
+
+
+def outcome_of(e: HTTPException) -> str:
+    if e.status_code == 504:
+        return "timeout"
+    if e.status_code == 503:
+        return "busy" if e.detail == BUSY else "model_down"
+    return "error"
+
+
+def log_success(s, kind: str, user: dict, db_id: str, model_id: str, resp: dict) -> None:
+    usage = resp.get("usage") or NO_USAGE
+    try:
+        s.store.log_run(
+            kind=kind, user_id=user["id"], database_id=db_id, model=model_id, outcome="ok",
+            cache_hit=resp.get("cache_hit"), level=resp.get("level"),
+            n_attempts=resp.get("n_attempts"), total_ms=resp.get("latency_ms"),
+            model_ms=usage.get("model_ms"), prompt_tokens=usage.get("prompt_tokens"),
+            completion_tokens=usage.get("completion_tokens"), ask_id=resp.get("ask_id"),
+        )
+    except Exception:
+        log.exception("could not write the usage log")  # never fail an answer over statistics
+
+
+def log_failure(s, kind: str, user: dict, db_id: str, model_id: str, e: HTTPException, start: float) -> None:
+    try:
+        s.store.log_run(
+            kind=kind, user_id=user["id"], database_id=db_id, model=model_id,
+            outcome=outcome_of(e), total_ms=int((time.perf_counter() - start) * 1000),
+        )
+    except Exception:
+        log.exception("could not write the usage log")
+
+
+class _Metered:
+    """Wraps a writer to measure the time spent waiting for the model and the
+    tokens it reports. Everything after that (running SQL, grouping, checks)
+    is the rest of latency_ms."""
+
+    def __init__(self, writer):
+        self._w = writer
+        self.ms = 0.0
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+
+    def write(self, prompt: str, n: int) -> list[str]:
+        t = time.perf_counter()
+        try:
+            return self._w.write(prompt, n)
+        finally:
+            self.ms += (time.perf_counter() - t) * 1000
+            u = getattr(self._w, "last_usage", None) or {}
+            self.prompt_tokens += int(u.get("prompt_tokens") or 0)
+            self.completion_tokens += int(u.get("completion_tokens") or 0)
+
+    def __getattr__(self, name):
+        return getattr(self._w, name)
 
 
 def _run_fresh(s, db, model, m2, question: str, start: float, n: int | None = None) -> dict:
@@ -138,10 +227,12 @@ def _pipeline(s, db, model, m2, question: str, start: float, n: int | None = Non
         except Exception:
             second = None  # optional; the check shows "off"
     try:
-        writer = s.writer_factory(model)
+        writer = _Metered(s.writer_factory(model))
     except LLMError:
         log.exception("model not available")
         raise HTTPException(503, MODEL_DOWN) from None
+    if second is not None:
+        second = _Metered(second)
     try:
         answer = run_ask(
             db.path, question, writer=writer, n=n or s.attempts, thresholds=s.thresholds,
@@ -162,6 +253,12 @@ def _pipeline(s, db, model, m2, question: str, start: float, n: int | None = Non
     )
     resp["cache_hit"] = False
     resp["cached_at"] = None
+    metered = [w for w in (writer, second) if w is not None]
+    resp["usage"] = {
+        "model_ms": int(sum(w.ms for w in metered)),
+        "prompt_tokens": sum(w.prompt_tokens for w in metered),
+        "completion_tokens": sum(w.completion_tokens for w in metered),
+    }
     return resp
 
 

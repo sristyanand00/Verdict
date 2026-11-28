@@ -92,6 +92,9 @@ def build_checks(
         checks.append(Check("not_empty", "Not empty", "off", "There is no answer to check."))
     elif top.is_empty_answer:
         checks.append(Check("not_empty", "Not empty", "fail", "The answer is empty or only NULL."))
+    elif top.is_zero_answer:
+        checks.append(Check("not_empty", "Not empty", "fail",
+                            "The answer is 0, which a filter on a wrong value also gives."))
     else:
         checks.append(Check("not_empty", "Not empty", "pass", "The answer has values."))
 

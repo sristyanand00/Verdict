@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from verdict.api.auth import admin_user
 from verdict.api.deps import get_database, state
-from verdict.api.routes.ask import _run_fresh
+from verdict.api.routes.ask import NO_USAGE, _run_fresh, earlier_cached, log_failure, log_success, outcome_of
 from verdict.engine.knowledge import normalize
 
 router = APIRouter()
@@ -39,10 +39,13 @@ class ArenaRunRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
     database_id: str
     models: list[str] = Field(min_length=1, max_length=MAX_MODELS)
+    #: skip the cache and run every model again (used by scripts/load_test.py)
+    fresh: bool = False
 
 
-def _key(s, db_id: str, question: str, model_id: str, n: int) -> str:
-    parts = ["arena", db_id, normalize(question), model_id, str(n), str(s.store.knowledge_version(db_id))]
+def _key(s, db_id: str, question: str, model_id: str, n: int, version: int | None = None) -> str:
+    v = s.store.knowledge_version(db_id) if version is None else version
+    parts = ["arena", db_id, normalize(question), model_id, str(n), str(v)]
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
 
@@ -95,19 +98,32 @@ def arena_run(body: ArenaRunRequest, request: Request, user: dict = Depends(admi
             continue
         n = s.attempts if m.own else s.arena_outside_attempts
         key = _key(s, db.id, body.question, m.id, n)
-        cached = s.store.cache_get(key) if s.cache_enabled else None
+        cached = s.store.cache_get(key) if s.cache_enabled and not body.fresh else None
         if cached is not None:
             results.append(_summary(m, cached["response"], True))
+            log_success(s, "arena", user, db.id, m.id,
+                        {**cached["response"], "cache_hit": True, "usage": NO_USAGE, "latency_ms": 0})
             continue
+        start = time.perf_counter()
         try:
-            resp = _run_fresh(s, db, m, None, body.question, time.perf_counter(), n=n)
+            resp = _run_fresh(s, db, m, None, body.question, start, n=n)
         except HTTPException as e:
+            log_failure(s, "arena", user, db.id, m.id, e, start)
+            # Model down or too slow: show its answer from before the last
+            # knowledge change, if one is saved.
+            old = None
+            if s.cache_enabled and not body.fresh and outcome_of(e) in ("model_down", "timeout"):
+                old = earlier_cached(s, db.id, lambda v: _key(s, db.id, body.question, m.id, n, v))
+            if old is not None:
+                results.append(_summary(m, old["response"], True))
+                continue
             # One model failing (quota, timeout) does not stop the others.
             results.append(_not_run(m, "error", str(e.detail)))
             continue
-        if s.cache_enabled:
+        if s.cache_enabled and not body.fresh:
             s.store.cache_put(key, db.id, body.question, resp)
         results.append(_summary(m, resp, False))
+        log_success(s, "arena", user, db.id, m.id, resp)
 
     return {
         "question": body.question,

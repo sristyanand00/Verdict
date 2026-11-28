@@ -81,6 +81,18 @@ def test_repeat_run_comes_from_the_cache(arena):
     assert by_model(r2)["cloud"]["cache_hit"] is True and calls["cloud"] == 1
 
 
+def test_fresh_skips_the_cache_and_leaves_it_alone(arena):
+    _, admin, state, calls, _ = arena
+    state.cache_enabled = True
+    run(admin, ["cloud"])
+    r = admin.post("/api/arena/run", json={"question": "How many students?", "database_id": "tiny",
+                                           "models": ["cloud"], "fresh": True})
+    assert by_model(r)["cloud"]["cache_hit"] is False and calls["cloud"] == 2
+    r = admin.post("/api/arena/run", json={"question": "Something new?", "database_id": "tiny",
+                                           "models": ["cloud"], "fresh": True})
+    assert len(state.store.cache_list()) == 1   # the fresh runs added nothing
+
+
 def test_a_failing_outside_model_does_not_stop_the_others(arena):
     _, admin, _, _, cloud = arena
     cloud["down"] = True

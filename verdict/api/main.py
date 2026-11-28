@@ -21,7 +21,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from verdict.api.auth import RateLimiter, current_user
-from verdict.api.routes import accounts, arena_run, ask, data, knowledge, models, results, review, saved
+from verdict.api.routes import (
+    accounts, admin_stats, arena_run, ask, data, knowledge, models, results, review, saved,
+)
 from verdict.api.routes.accounts import ensure_admin
 from verdict.api.routes.models import models_json
 from verdict.api.state import AppState
@@ -49,7 +51,7 @@ def create_app(app_state: AppState | None = None, frontend_dist: Path | None = F
     # other /api route needs a logged-in, active account. /api/health and the
     # website files are open.
     app.include_router(accounts.router, prefix="/api")
-    for r in (ask, review, knowledge, data, models, results, saved, arena_run):
+    for r in (ask, review, knowledge, data, models, results, saved, arena_run, admin_stats):
         app.include_router(r.router, prefix="/api", dependencies=[Depends(current_user)])
 
     @app.get("/api/health")

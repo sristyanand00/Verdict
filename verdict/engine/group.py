@@ -66,6 +66,21 @@ class AnswerGroup:
         rows = self.result.rows
         return not rows or all(v is None for row in rows for v in row)
 
+    @property
+    def is_zero_answer(self) -> bool:
+        """True when the whole answer is a single 0.
+
+        A filter on a value the data does not use ("female" when the column
+        holds "F", "CANCELED" when it holds "canceled") counts no rows, and
+        COUNT returns 0, not NULL. Several attempts easily make the same
+        mistake, so agreement alone cannot tell this 0 from a real one.
+        """
+        rows = self.result.rows
+        if len(rows) != 1 or len(rows[0]) != 1:
+            return False
+        v = rows[0][0]
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and v == 0
+
 
 @dataclass
 class Grouping:

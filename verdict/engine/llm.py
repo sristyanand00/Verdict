@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -50,7 +51,32 @@ class SQLWriter(Protocol):
         ...
 
 
-class GeminiWriter:
+class _CountsTokens:
+    """Adds up the tokens the API reports for the calls of the last write().
+
+    ``last_usage`` is {"prompt_tokens", "completion_tokens"}; a count the API
+    did not report stays 0. Used only for the provider's usage statistics.
+    """
+
+    def _reset_usage(self) -> None:
+        self._usage_lock = threading.Lock()
+        self._usage = [0, 0]
+
+    def _add_usage(self, prompt_tokens, completion_tokens) -> None:
+        lock = getattr(self, "_usage_lock", None)
+        if lock is None:
+            return
+        with lock:
+            self._usage[0] += int(prompt_tokens or 0)
+            self._usage[1] += int(completion_tokens or 0)
+
+    @property
+    def last_usage(self) -> dict[str, int]:
+        p, c = getattr(self, "_usage", (0, 0))
+        return {"prompt_tokens": p, "completion_tokens": c}
+
+
+class GeminiWriter(_CountsTokens):
     """Writes SQL with Google's Gemini API.
 
     The key and model come from the environment (GEMINI_API_KEY,
@@ -108,6 +134,10 @@ class GeminiWriter:
                     config=types.GenerateContentConfig(temperature=self.temperature),
                 )
                 reply = resp.text or ""
+                meta = getattr(resp, "usage_metadata", None)
+                if meta is not None:
+                    self._add_usage(getattr(meta, "prompt_token_count", 0),
+                                    getattr(meta, "candidates_token_count", 0))
                 break
             except Exception as e:  # network, quota, safety block
                 err = f"{type(e).__name__}: {e}"
@@ -122,6 +152,7 @@ class GeminiWriter:
         return reply, None
 
     def write(self, prompt: str, n: int) -> list[str]:
+        self._reset_usage()
         # The n calls are independent, so they run at the same time.
         with ThreadPoolExecutor(max_workers=min(n, self.max_parallel)) as pool:
             results = list(pool.map(lambda i: self._one(prompt, i), range(n)))
@@ -134,7 +165,7 @@ class GeminiWriter:
         return [reply for reply, _ in results]
 
 
-class OpenAICompatWriter:
+class OpenAICompatWriter(_CountsTokens):
     """Writes SQL with any server that speaks the OpenAI chat API.
 
     One class covers both places Qwen runs:
@@ -197,6 +228,8 @@ class OpenAICompatWriter:
         try:
             with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
+            usage = data.get("usage") or {}
+            self._add_usage(usage.get("prompt_tokens"), usage.get("completion_tokens"))
             return data["choices"][0]["message"]["content"] or "", None
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:300]
@@ -205,6 +238,7 @@ class OpenAICompatWriter:
             return "", f"{type(e).__name__}: {e}"
 
     def write(self, prompt: str, n: int) -> list[str]:
+        self._reset_usage()
         with ThreadPoolExecutor(max_workers=max(1, min(n, self.max_parallel))) as pool:
             results = list(pool.map(lambda _: self._one(prompt), range(n)))
 
